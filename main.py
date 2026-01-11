@@ -884,7 +884,7 @@ st.sidebar.header("⚡ Otomatik Yenileme")
 refresh_option = st.sidebar.selectbox(
     "Yenileme Aralığı",
     options=list(REFRESH_INTERVALS.keys()),
-    index=2
+    index=4
 )
 
 refresh_interval = REFRESH_INTERVALS[refresh_option]
