@@ -156,52 +156,86 @@ def get_stock_price(symbol):
     except:
         return None, None
 
+def normalize_score(values):
+    if not values or max(values) == min(values):
+        return [50] * len(values)
+    min_val, max_val = min(values), max(values)
+    return [(v - min_val) / (max_val - min_val) * 100 for v in values]
+
 @st.cache_data(ttl=60)
 def get_sector_holdings_data(etf_symbol):
     holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
-    data = []
+    raw_data = []
+    
     for symbol in holdings:
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="5d")
+            hist = ticker.history(period="10d")
             info = ticker.info
             company_name = info.get("shortName", symbol)
+            
+            forward_pe = info.get("forwardPE", 0) or 0
+            peg_ratio = info.get("pegRatio", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
             profit_margin = info.get("profitMargins", 0) or 0
             
             if len(hist) >= 2:
                 current = hist['Close'].iloc[-1]
                 previous = hist['Close'].iloc[-2]
-                change = ((current - previous) / previous) * 100
-                score = change + (revenue_growth * 100) + (profit_margin * 50)
-                data.append({
+                daily_change = ((current - previous) / previous) * 100
+                
+                if len(hist) >= 5:
+                    week_ago = hist['Close'].iloc[0]
+                    momentum = ((current - week_ago) / week_ago) * 100
+                else:
+                    momentum = daily_change
+                
+                valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
+                
+                raw_data.append({
                     "Sembol": symbol,
-                    "Şirket": company_name[:25],
+                    "Şirket": company_name[:20],
                     "Fiyat ($)": round(current, 2),
-                    "Değişim (%)": round(change, 2),
-                    "Gelir Büyümesi (%)": round(revenue_growth * 100, 1),
-                    "Kar Marjı (%)": round(profit_margin * 100, 1),
-                    "_score": score
-                })
-            elif len(hist) == 1:
-                data.append({
-                    "Sembol": symbol,
-                    "Şirket": company_name[:25],
-                    "Fiyat ($)": round(hist['Close'].iloc[-1], 2),
-                    "Değişim (%)": 0,
-                    "Gelir Büyümesi (%)": round(revenue_growth * 100, 1),
-                    "Kar Marjı (%)": round(profit_margin * 100, 1),
-                    "_score": (revenue_growth * 100) + (profit_margin * 50)
+                    "Değişim (%)": round(daily_change, 2),
+                    "_valuation": valuation_score,
+                    "_growth": revenue_growth * 100,
+                    "_profitability": profit_margin * 100,
+                    "_momentum": momentum
                 })
         except:
             pass
     
-    if data:
-        df = pd.DataFrame(data)
-        df = df.sort_values(by="_score", ascending=False).head(5)
-        df = df.drop(columns=["_score"])
-        return df
-    return pd.DataFrame()
+    if not raw_data:
+        return pd.DataFrame()
+    
+    valuations = normalize_score([d["_valuation"] for d in raw_data])
+    growths = normalize_score([d["_growth"] for d in raw_data])
+    profits = normalize_score([d["_profitability"] for d in raw_data])
+    momentums = normalize_score([d["_momentum"] for d in raw_data])
+    
+    final_data = []
+    for i, d in enumerate(raw_data):
+        val_puan = round(valuations[i] * 0.25, 1)
+        buy_puan = round(growths[i] * 0.25, 1)
+        kar_puan = round(profits[i] * 0.25, 1)
+        mom_puan = round(momentums[i] * 0.25, 1)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan, 1)
+        
+        final_data.append({
+            "Sembol": d["Sembol"],
+            "Şirket": d["Şirket"],
+            "Fiyat ($)": d["Fiyat ($)"],
+            "Değişim (%)": d["Değişim (%)"],
+            "Değerleme": val_puan,
+            "Büyüme": buy_puan,
+            "Karlılık": kar_puan,
+            "Momentum": mom_puan,
+            "Toplam Puan": toplam
+        })
+    
+    df = pd.DataFrame(final_data)
+    df = df.sort_values(by="Toplam Puan", ascending=False).head(5)
+    return df
 
 @st.cache_data(ttl=60)
 def get_portfolio_data():
