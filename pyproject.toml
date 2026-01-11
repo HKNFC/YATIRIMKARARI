@@ -9,5 +9,6 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "sqlalchemy>=2.0.45",
     "streamlit>=1.52.2",
+    "streamlit-autorefresh>=1.0.1",
     "yfinance>=1.0",
 ]

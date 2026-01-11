@@ -5,9 +5,18 @@ import yfinance as yf
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
+from streamlit_autorefresh import st_autorefresh
 import os
 
 st.set_page_config(page_title="Morning Alpha Dashboard", layout="wide")
+
+REFRESH_INTERVALS = {
+    "Kapalı": 0,
+    "30 Saniye": 30000,
+    "1 Dakika": 60000,
+    "2 Dakika": 120000,
+    "5 Dakika": 300000
+}
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
@@ -41,7 +50,7 @@ def get_session():
 st.title("☀️ Morning Alpha: Yatırım Karar Destek Paneli")
 st.subheader("Piyasa Analizi ve Sektörel Fırsatlar")
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_vix_data():
     try:
         vix = yf.Ticker("^VIX")
@@ -67,7 +76,7 @@ PERIOD_OPTIONS = {
     "1 Yıl": ("400d", 252)
 }
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_sector_data(period_key="1 Gün"):
     sector_etfs = {
         "Yapay Zeka (BOTZ)": "BOTZ",
@@ -101,7 +110,7 @@ def get_sector_data(period_key="1 Gün"):
     
     return pd.DataFrame(results)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_stock_price(symbol):
     try:
         ticker = yf.Ticker(symbol)
@@ -117,7 +126,7 @@ def get_stock_price(symbol):
     except:
         return None, None
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_portfolio_data():
     symbols = ["NVDA", "VRT", "CRWD", "LLY", "GEHC", "FSLR", "TSLA", "AVAV", "RKLB", "SOFI"]
     sectors = ["Yapay Zeka", "Veri Altyapısı", "Siber Güvenlik", "Biyoteknoloji", "Sağlık Tek.", "Enerji", "EV", "Savunma", "Uzay", "Fintech"]
@@ -520,6 +529,21 @@ if active_alerts:
     for alert in active_alerts[:5]:
         direction = "↑" if alert.alert_type == "above" else "↓"
         st.sidebar.caption(f"{alert.symbol} {direction} ${alert.target_price:.2f}")
+
+st.sidebar.divider()
+st.sidebar.header("⚡ Otomatik Yenileme")
+refresh_option = st.sidebar.selectbox(
+    "Yenileme Aralığı",
+    options=list(REFRESH_INTERVALS.keys()),
+    index=2
+)
+
+refresh_interval = REFRESH_INTERVALS[refresh_option]
+if refresh_interval > 0:
+    count = st_autorefresh(interval=refresh_interval, limit=None, key="auto_refresh")
+    st.sidebar.success(f"Her {refresh_option} yenileniyor")
+else:
+    st.sidebar.info("Otomatik yenileme kapalı")
 
 st.sidebar.divider()
 st.sidebar.header("📊 Veri Bilgisi")
