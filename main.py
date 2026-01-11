@@ -48,8 +48,32 @@ Session = sessionmaker(bind=engine)
 def get_session():
     return Session()
 
+st.sidebar.header("🌍 Pazar Seçimi")
+selected_market_name = st.sidebar.radio(
+    "Hangi borsayı takip etmek istiyorsunuz?",
+    options=list(MARKET_OPTIONS.keys()),
+    index=0
+)
+selected_market = MARKET_OPTIONS[selected_market_name]
+
+if selected_market == "US":
+    st.sidebar.success("🇺🇸 ABD Borsaları aktif")
+    CURRENT_SECTOR_MAP = US_SECTOR_ETFS
+    CURRENT_HOLDINGS = SECTOR_HOLDINGS
+    CURRENCY_SYMBOL = "$"
+    PRICE_COL_NAME = "Fiyat ($)"
+else:
+    st.sidebar.success("🇹🇷 BIST (Borsa İstanbul) aktif")
+    CURRENT_SECTOR_MAP = BIST_SECTORS
+    CURRENT_HOLDINGS = BIST_SECTOR_HOLDINGS
+    CURRENCY_SYMBOL = "₺"
+    PRICE_COL_NAME = "Fiyat (₺)"
+
+st.sidebar.divider()
+
 st.title("☀️ Morning Alpha: Yatırım Karar Destek Paneli")
-st.subheader("Piyasa Analizi ve Sektörel Fırsatlar")
+market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İstanbul)"
+st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
 
 @st.cache_data(ttl=60)
 def get_vix_data():
@@ -67,6 +91,38 @@ def get_vix_data():
     except:
         return 18.5, 0
 
+@st.cache_data(ttl=60)
+def get_bist100_data():
+    try:
+        xu100 = yf.Ticker("XU100.IS")
+        hist = xu100.history(period="5d")
+        if len(hist) >= 2:
+            current = hist['Close'].iloc[-1]
+            previous = hist['Close'].iloc[-2]
+            change = ((current - previous) / previous) * 100
+            return current, change
+        elif len(hist) == 1:
+            return hist['Close'].iloc[-1], 0
+        return 10000, 0
+    except:
+        return 10000, 0
+
+@st.cache_data(ttl=60)
+def get_usdtry_data():
+    try:
+        usdtry = yf.Ticker("USDTRY=X")
+        hist = usdtry.history(period="5d")
+        if len(hist) >= 2:
+            current = hist['Close'].iloc[-1]
+            previous = hist['Close'].iloc[-2]
+            change = ((current - previous) / previous) * 100
+            return current, change
+        elif len(hist) == 1:
+            return hist['Close'].iloc[-1], 0
+        return 35.0, 0
+    except:
+        return 35.0, 0
+
 PERIOD_OPTIONS = {
     "1 Gün": ("2d", 1),
     "5 Gün": ("7d", 5),
@@ -77,7 +133,12 @@ PERIOD_OPTIONS = {
     "1 Yıl": ("400d", 252)
 }
 
-SECTOR_ETFS = {
+MARKET_OPTIONS = {
+    "ABD Borsaları": "US",
+    "BIST (Borsa İstanbul)": "BIST"
+}
+
+US_SECTOR_ETFS = {
     "Yapay Zeka (BOTZ)": "BOTZ",
     "Siber Güvenlik (HACK)": "HACK",
     "Yenilenebilir Enerji (ICLN)": "ICLN",
@@ -94,6 +155,34 @@ SECTOR_ETFS = {
     "İletişim (XLC)": "XLC",
     "Yarı İletken (SMH)": "SMH"
 }
+
+BIST_SECTORS = {
+    "Bankacılık": "BANK",
+    "Holding": "HOLD",
+    "Demir Çelik": "STEEL",
+    "Havacılık": "AIR",
+    "Otomotiv": "AUTO",
+    "Perakende": "RETAIL",
+    "Enerji": "ENERGY",
+    "Telekomünikasyon": "TELCO",
+    "İnşaat & GYO": "CONST",
+    "Gıda & İçecek": "FOOD"
+}
+
+BIST_SECTOR_HOLDINGS = {
+    "BANK": ["GARAN.IS", "AKBNK.IS", "YKBNK.IS", "ISCTR.IS", "HALKB.IS", "VAKBN.IS", "TSKB.IS", "ALBRK.IS"],
+    "HOLD": ["SAHOL.IS", "KCHOL.IS", "DOHOL.IS", "TAVHL.IS", "TKFEN.IS", "AGHOL.IS", "KOZAL.IS", "ECZYT.IS"],
+    "STEEL": ["EREGL.IS", "KRDMD.IS", "KRDMA.IS", "KRDMB.IS", "CELHA.IS", "BRSAN.IS", "BURCE.IS", "CEMTS.IS"],
+    "AIR": ["THYAO.IS", "PGSUS.IS", "CLEBI.IS", "TAVHL.IS"],
+    "AUTO": ["TOASO.IS", "FROTO.IS", "DOAS.IS", "OTKAR.IS", "ASUZU.IS", "TTRAK.IS"],
+    "RETAIL": ["BIMAS.IS", "MGROS.IS", "SOKM.IS", "BIZIM.IS", "MAVI.IS", "VAKKO.IS"],
+    "ENERGY": ["TUPRS.IS", "PETKM.IS", "AYEN.IS", "AKSEN.IS", "ODAS.IS", "ZOREN.IS", "AYDEM.IS", "ENJSA.IS"],
+    "TELCO": ["TCELL.IS", "TTKOM.IS", "NETAS.IS"],
+    "CONST": ["EKGYO.IS", "ISGYO.IS", "ENKAI.IS", "KLGYO.IS", "HLGYO.IS", "TRGYO.IS"],
+    "FOOD": ["ULKER.IS", "CCOLA.IS", "AEFES.IS", "BANVT.IS", "TATGD.IS", "KERVT.IS", "PENGD.IS"]
+}
+
+SECTOR_ETFS = US_SECTOR_ETFS
 
 SECTOR_HOLDINGS = {
     "BOTZ": ["NVDA", "ISRG", "INTC", "TER", "IRBT", "PATH", "CGNX", "ALGN", "ROK", "EMR"],
@@ -114,15 +203,48 @@ SECTOR_HOLDINGS = {
 }
 
 @st.cache_data(ttl=60)
-def get_sector_data(period_key="1 Gün"):
-    sector_etfs = SECTOR_ETFS
+def get_sector_data(period_key="1 Gün", market="US"):
+    if market == "US":
+        sector_map = US_SECTOR_ETFS
+    else:
+        sector_map = BIST_SECTORS
     
     fetch_period, lookback_days = PERIOD_OPTIONS.get(period_key, ("2d", 1))
     
     results = []
-    for name, symbol in sector_etfs.items():
+    for name, symbol in sector_map.items():
         try:
-            ticker = yf.Ticker(symbol)
+            if market == "US":
+                ticker = yf.Ticker(symbol)
+            else:
+                holdings = BIST_SECTOR_HOLDINGS.get(symbol, [])
+                if not holdings:
+                    results.append({"Sektör": name, "Değişim (%)": 0})
+                    continue
+                sector_changes = []
+                for stock_symbol in holdings[:5]:
+                    try:
+                        ticker = yf.Ticker(stock_symbol)
+                        hist = ticker.history(period=fetch_period)
+                        if len(hist) > lookback_days:
+                            current = hist['Close'].iloc[-1]
+                            previous = hist['Close'].iloc[-(lookback_days + 1)]
+                            change = ((current - previous) / previous) * 100
+                            sector_changes.append(change)
+                        elif len(hist) >= 2:
+                            current = hist['Close'].iloc[-1]
+                            previous = hist['Close'].iloc[0]
+                            change = ((current - previous) / previous) * 100
+                            sector_changes.append(change)
+                    except:
+                        pass
+                if sector_changes:
+                    avg_change = sum(sector_changes) / len(sector_changes)
+                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2)})
+                else:
+                    results.append({"Sektör": name, "Değişim (%)": 0})
+                continue
+            
             hist = ticker.history(period=fetch_period)
             if len(hist) > lookback_days:
                 current = hist['Close'].iloc[-1]
@@ -164,8 +286,16 @@ def normalize_score(values):
     return [(v - min_val) / (max_val - min_val) * 100 for v in values]
 
 @st.cache_data(ttl=60)
-def get_sector_holdings_data(etf_symbol):
-    holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+def get_sector_holdings_data(sector_key, market="US"):
+    if market == "US":
+        holdings = SECTOR_HOLDINGS.get(sector_key, [])
+        currency = "$"
+        price_col = "Fiyat ($)"
+    else:
+        holdings = BIST_SECTOR_HOLDINGS.get(sector_key, [])
+        currency = "₺"
+        price_col = "Fiyat (₺)"
+    
     raw_data = []
     
     for symbol in holdings:
@@ -173,7 +303,7 @@ def get_sector_holdings_data(etf_symbol):
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="10d")
             info = ticker.info
-            company_name = info.get("shortName", symbol)
+            company_name = info.get("shortName", symbol.replace(".IS", ""))
             
             forward_pe = info.get("forwardPE", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
@@ -196,9 +326,9 @@ def get_sector_holdings_data(etf_symbol):
                 valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
                 
                 raw_data.append({
-                    "Sembol": symbol,
+                    "Sembol": symbol.replace(".IS", "") if market == "BIST" else symbol,
                     "Şirket": company_name[:20],
-                    "Fiyat ($)": round(current, 2),
+                    price_col: round(current, 2),
                     "Değişim (%)": round(daily_change, 2),
                     "_valuation": valuation_score,
                     "_growth": revenue_growth * 100,
@@ -230,7 +360,7 @@ def get_sector_holdings_data(etf_symbol):
         final_data.append({
             "Sembol": d["Sembol"],
             "Şirket": d["Şirket"],
-            "Fiyat ($)": d["Fiyat ($)"],
+            price_col: d[price_col],
             "Değişim (%)": d["Değişim (%)"],
             "Değerleme": val_puan,
             "Büyüme": buy_puan,
@@ -245,9 +375,15 @@ def get_sector_holdings_data(etf_symbol):
     return df
 
 @st.cache_data(ttl=60)
-def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
+def get_top_stocks_from_sector(sector_key, sector_name, count=2, market="US"):
     """Belirli bir sektörden en yüksek puanlı hisseleri seçer"""
-    holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+    if market == "US":
+        holdings = SECTOR_HOLDINGS.get(sector_key, [])
+        price_col = "Fiyat ($)"
+    else:
+        holdings = BIST_SECTOR_HOLDINGS.get(sector_key, [])
+        price_col = "Fiyat (₺)"
+    
     raw_data = []
     
     for symbol in holdings:
@@ -255,7 +391,7 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="10d")
             info = ticker.info
-            company_name = info.get("shortName", symbol)
+            company_name = info.get("shortName", symbol.replace(".IS", ""))
             
             forward_pe = info.get("forwardPE", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
@@ -278,10 +414,10 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
                 valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
                 
                 raw_data.append({
-                    "Sembol": symbol,
+                    "Sembol": symbol.replace(".IS", "") if market == "BIST" else symbol,
                     "Şirket": company_name[:20],
                     "Sektör": sector_name,
-                    "Fiyat ($)": round(current, 2),
+                    price_col: round(current, 2),
                     "Günlük Değişim (%)": round(daily_change, 2),
                     "_valuation": valuation_score,
                     "_growth": revenue_growth * 100,
@@ -314,7 +450,7 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
             "Sembol": d["Sembol"],
             "Şirket": d["Şirket"],
             "Sektör": d["Sektör"],
-            "Fiyat ($)": d["Fiyat ($)"],
+            price_col: d[price_col],
             "Günlük Değişim (%)": d["Günlük Değişim (%)"],
             "Toplam Puan": toplam
         })
@@ -323,9 +459,15 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
     return sorted_data[:count]
 
 @st.cache_data(ttl=60)
-def get_all_sector_candidates(etf_symbol, sector_name):
+def get_all_sector_candidates(sector_key, sector_name, market="US"):
     """Bir sektördeki tüm adayları puanlarıyla döndürür"""
-    holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+    if market == "US":
+        holdings = SECTOR_HOLDINGS.get(sector_key, [])
+        price_col = "Fiyat ($)"
+    else:
+        holdings = BIST_SECTOR_HOLDINGS.get(sector_key, [])
+        price_col = "Fiyat (₺)"
+    
     raw_data = []
     
     for symbol in holdings:
@@ -333,7 +475,7 @@ def get_all_sector_candidates(etf_symbol, sector_name):
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="10d")
             info = ticker.info
-            company_name = info.get("shortName", symbol)
+            company_name = info.get("shortName", symbol.replace(".IS", ""))
             
             forward_pe = info.get("forwardPE", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
@@ -355,10 +497,10 @@ def get_all_sector_candidates(etf_symbol, sector_name):
                 valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
                 
                 raw_data.append({
-                    "Sembol": symbol,
+                    "Sembol": symbol.replace(".IS", "") if market == "BIST" else symbol,
                     "Şirket": company_name[:20],
                     "Sektör": sector_name,
-                    "Fiyat ($)": round(current, 2),
+                    price_col: round(current, 2),
                     "Günlük Değişim (%)": round(daily_change, 2),
                     "_valuation": valuation_score,
                     "_growth": revenue_growth * 100,
@@ -391,7 +533,7 @@ def get_all_sector_candidates(etf_symbol, sector_name):
             "Sembol": d["Sembol"],
             "Şirket": d["Şirket"],
             "Sektör": d["Sektör"],
-            "Fiyat ($)": d["Fiyat ($)"],
+            price_col: d[price_col],
             "Günlük Değişim (%)": d["Günlük Değişim (%)"],
             "Toplam Puan": toplam
         })
@@ -399,9 +541,14 @@ def get_all_sector_candidates(etf_symbol, sector_name):
     return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
 
 @st.cache_data(ttl=60)
-def get_portfolio_data(period_key="1 Gün"):
-    sector_df = get_sector_data(period_key)
+def get_portfolio_data(period_key="1 Gün", market="US"):
+    sector_df = get_sector_data(period_key, market)
     sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
+    
+    if market == "US":
+        sector_map = US_SECTOR_ETFS
+    else:
+        sector_map = BIST_SECTORS
     
     top_6_sectors = sector_df.head(6)
     
@@ -410,10 +557,10 @@ def get_portfolio_data(period_key="1 Gün"):
     
     for idx, row in top_6_sectors.iterrows():
         sector_name = row["Sektör"]
-        etf_symbol = SECTOR_ETFS.get(sector_name, "")
+        sector_key = sector_map.get(sector_name, "")
         rank = list(top_6_sectors.index).index(idx) + 1
         
-        candidates = get_all_sector_candidates(etf_symbol, sector_name)
+        candidates = get_all_sector_candidates(sector_key, sector_name, market)
         sector_candidates[sector_name] = candidates
         sector_quotas[sector_name] = 2 if rank <= 4 else 1
     
@@ -979,14 +1126,23 @@ if triggered_alerts:
         st.toast(f"🚨 ALARM: {alert['symbol']} ${alert['target']:.2f} seviyesinin {direction}! Guncel: ${alert['current']:.2f}", icon="🔔")
 
 with st.spinner("Piyasa verileri yükleniyor..."):
-    vix_val, vix_change = get_vix_data()
-
-market_status = "GÜVENLİ" if vix_val < 25 else "RİSKLİ"
+    if selected_market == "US":
+        vix_val, vix_change = get_vix_data()
+        market_status = "GÜVENLİ" if vix_val < 25 else "RİSKLİ"
+    else:
+        bist_val, bist_change = get_bist100_data()
+        usd_val, usd_change = get_usdtry_data()
+        market_status = "POZİTİF" if bist_change > 0 else "NEGATİF"
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Piyasa Durumu", market_status, delta=None)
-col2.metric("VIX (Korku Endeksi)", f"{vix_val:.2f}", delta=f"{vix_change:+.2f}%")
-col3.metric("Önerilen Strateji", "Alım Yapılabilir" if market_status == "GÜVENLİ" else "Nakde Geç")
+
+if selected_market == "US":
+    col2.metric("VIX (Korku Endeksi)", f"{vix_val:.2f}", delta=f"{vix_change:+.2f}%")
+    col3.metric("Önerilen Strateji", "Alım Yapılabilir" if market_status == "GÜVENLİ" else "Nakde Geç")
+else:
+    col2.metric("BIST-100", f"{bist_val:,.0f}", delta=f"{bist_change:+.2f}%")
+    col3.metric("USD/TRY", f"₺{usd_val:.2f}", delta=f"{usd_change:+.2f}%")
 
 st.divider()
 
@@ -1000,12 +1156,13 @@ selected_period = st.radio(
 )
 
 with st.spinner("Sektör verileri yükleniyor..."):
-    sector_data = get_sector_data(selected_period)
+    sector_data = get_sector_data(selected_period, selected_market)
 
 sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
 
-if "selected_sector_name" not in st.session_state:
-    st.session_state.selected_sector_name = list(SECTOR_ETFS.keys())[0]
+if "selected_sector_name" not in st.session_state or st.session_state.get("last_market") != selected_market:
+    st.session_state.selected_sector_name = list(CURRENT_SECTOR_MAP.keys())[0]
+    st.session_state.last_market = selected_market
 
 max_val = sorted_sector_data["Değişim (%)"].max()
 min_val = sorted_sector_data["Değişim (%)"].min()
@@ -1021,8 +1178,14 @@ fig = go.Figure(go.Bar(
     textfont=dict(size=11),
     hovertemplate="<b>%{x}</b><br>Değişim: %{y:.2f}%<extra></extra>"
 ))
+chart_title = f"Sektör Performansı ({selected_period}) - Detay için çubuğa tıklayın"
+if selected_market == "US":
+    chart_title = f"ABD Sektör ETF Performansı ({selected_period}) - Detay için çubuğa tıklayın"
+else:
+    chart_title = f"BIST Sektör Performansı ({selected_period}) - Detay için çubuğa tıklayın"
+
 fig.update_layout(
-    title=f"Sektör ETF Performansı ({selected_period}) - Detay için çubuğa tıklayın",
+    title=chart_title,
     yaxis_title=f"Değişim ({selected_period}) (%)",
     showlegend=False,
     height=500,
@@ -1036,7 +1199,7 @@ if event and event.selection and len(event.selection.points) > 0:
     clicked_idx = event.selection.points[0].get("point_index", None)
     if clicked_idx is not None:
         clicked_sector = sorted_sector_data.iloc[clicked_idx]["Sektör"]
-        if clicked_sector in SECTOR_ETFS:
+        if clicked_sector in CURRENT_SECTOR_MAP:
             st.session_state.selected_sector_name = clicked_sector
 
 st.subheader("🔍 Sektör Detayı")
@@ -1044,9 +1207,9 @@ selected_sector = st.session_state.selected_sector_name
 st.success(f"**Seçili Sektör:** {selected_sector}")
 
 if selected_sector:
-    etf_symbol = SECTOR_ETFS[selected_sector]
+    sector_key = CURRENT_SECTOR_MAP.get(selected_sector, "")
     with st.spinner(f"{selected_sector} şirketleri yükleniyor..."):
-        holdings_data = get_sector_holdings_data(etf_symbol)
+        holdings_data = get_sector_holdings_data(sector_key, selected_market)
     
     if not holdings_data.empty:
         def color_holdings(val):
@@ -1065,10 +1228,11 @@ if selected_sector:
 st.divider()
 
 st.header("🎯 Sistemin Sizin İçin Seçtikleri")
-st.success("**En iyi 10 hisse önerisi**")
+market_name = "ABD" if selected_market == "US" else "BIST"
+st.success(f"**{market_name} için en iyi 10 hisse önerisi**")
 
 with st.spinner("Hisse verileri yükleniyor..."):
-    portfolio = get_portfolio_data(selected_period)
+    portfolio = get_portfolio_data(selected_period, selected_market)
 
 if not portfolio.empty:
     def color_portfolio(val):
@@ -1367,10 +1531,17 @@ with st.form("add_alert_form"):
 st.divider()
 
 st.sidebar.header("🗓️ Günlük Finansal Notlar")
-st.sidebar.info("""
+if selected_market == "US":
+    st.sidebar.info("""
 - **Fed Kararı:** Faizlerde sabit kalma beklentisi %85.
 - **Trend:** AI çiplerinden veri merkezi altyapısına rotasyon var.
 - **Dikkat:** Bugün NVIDIA bilançosu sonrası volatilite artabilir.
+""")
+else:
+    st.sidebar.info("""
+- **TCMB:** Faiz kararı takip edilmeli.
+- **Trend:** Bankacılık ve holding hisseleri öne çıkıyor.
+- **Dikkat:** Dolar/TL paritesi volatiliteyi etkiliyor.
 """)
 
 st.sidebar.divider()
