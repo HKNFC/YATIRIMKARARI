@@ -48,33 +48,6 @@ Session = sessionmaker(bind=engine)
 def get_session():
     return Session()
 
-st.sidebar.header("🌍 Pazar Seçimi")
-selected_market_name = st.sidebar.radio(
-    "Hangi borsayı takip etmek istiyorsunuz?",
-    options=list(MARKET_OPTIONS.keys()),
-    index=0
-)
-selected_market = MARKET_OPTIONS[selected_market_name]
-
-if selected_market == "US":
-    st.sidebar.success("🇺🇸 ABD Borsaları aktif")
-    CURRENT_SECTOR_MAP = US_SECTOR_ETFS
-    CURRENT_HOLDINGS = SECTOR_HOLDINGS
-    CURRENCY_SYMBOL = "$"
-    PRICE_COL_NAME = "Fiyat ($)"
-else:
-    st.sidebar.success("🇹🇷 BIST (Borsa İstanbul) aktif")
-    CURRENT_SECTOR_MAP = BIST_SECTORS
-    CURRENT_HOLDINGS = BIST_SECTOR_HOLDINGS
-    CURRENCY_SYMBOL = "₺"
-    PRICE_COL_NAME = "Fiyat (₺)"
-
-st.sidebar.divider()
-
-st.title("☀️ Morning Alpha: Yatırım Karar Destek Paneli")
-market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İstanbul)"
-st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
-
 @st.cache_data(ttl=60)
 def get_vix_data():
     try:
@@ -201,6 +174,33 @@ SECTOR_HOLDINGS = {
     "XLC": ["META", "GOOGL", "NFLX", "DIS", "T", "VZ", "CMCSA", "CHTR", "TMUS", "EA"],
     "SMH": ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "TXN", "INTC", "MU", "AMAT"]
 }
+
+st.sidebar.header("🌍 Pazar Seçimi")
+selected_market_name = st.sidebar.radio(
+    "Hangi borsayı takip etmek istiyorsunuz?",
+    options=list(MARKET_OPTIONS.keys()),
+    index=0
+)
+selected_market = MARKET_OPTIONS[selected_market_name]
+
+if selected_market == "US":
+    st.sidebar.success("🇺🇸 ABD Borsaları aktif")
+    CURRENT_SECTOR_MAP = US_SECTOR_ETFS
+    CURRENT_HOLDINGS = SECTOR_HOLDINGS
+    CURRENCY_SYMBOL = "$"
+    PRICE_COL_NAME = "Fiyat ($)"
+else:
+    st.sidebar.success("🇹🇷 BIST (Borsa İstanbul) aktif")
+    CURRENT_SECTOR_MAP = BIST_SECTORS
+    CURRENT_HOLDINGS = BIST_SECTOR_HOLDINGS
+    CURRENCY_SYMBOL = "₺"
+    PRICE_COL_NAME = "Fiyat (₺)"
+
+st.sidebar.divider()
+
+st.title("☀️ Morning Alpha: Yatırım Karar Destek Paneli")
+market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İstanbul)"
+st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
 
 @st.cache_data(ttl=60)
 def get_sector_data(period_key="1 Gün", market="US"):
