@@ -1278,10 +1278,10 @@ if not portfolio.empty:
     with st.form("save_system_portfolio_form"):
         investment_amount = st.number_input(
             "Toplam Yatırım Miktarı (USD)",
-            min_value=100.0,
-            max_value=1000000.0,
-            value=10000.0,
-            step=100.0,
+            min_value=100,
+            max_value=1000000,
+            value=10000,
+            step=100,
             help="Bu tutarı sistemin seçtiği hisselere eşit olarak dağıtacağız"
         )
         save_portfolio_btn = st.form_submit_button("💾 Portföyümü Oluştur", type="primary")
