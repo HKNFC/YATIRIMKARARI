@@ -1294,9 +1294,6 @@ if not portfolio.empty:
                 st.stop()
             session = get_session()
             try:
-                session.query(UserPortfolio).delete()
-                session.commit()
-                
                 stock_count = len(portfolio)
                 per_stock_amount = investment_amount / stock_count
                 
