@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import yfinance as yf
+import requests
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -463,6 +464,263 @@ BACKTEST_INTERVALS = {
     "3 Aylık": 90
 }
 
+FMP_API_KEY = os.environ.get("FMP_API_KEY", "")
+
+@st.cache_data(ttl=3600)
+def get_fmp_historical_ratios(symbol):
+    """FMP API'den tarihsel finansal rasyoları çeker (P/E, PS, vb.)"""
+    if not FMP_API_KEY:
+        return None
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/ratios/{symbol}?limit=40&apikey={FMP_API_KEY}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values('date', ascending=False)
+                return df
+        return None
+    except:
+        return None
+
+@st.cache_data(ttl=3600)
+def get_fmp_historical_growth(symbol):
+    """FMP API'den tarihsel büyüme verilerini çeker (gelir büyümesi, EPS büyümesi)"""
+    if not FMP_API_KEY:
+        return None
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/financial-growth/{symbol}?limit=40&apikey={FMP_API_KEY}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values('date', ascending=False)
+                return df
+        return None
+    except:
+        return None
+
+@st.cache_data(ttl=3600)
+def get_fmp_analyst_estimates(symbol):
+    """FMP API'den analist tahminlerini çeker"""
+    if not FMP_API_KEY:
+        return None
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/analyst-estimates/{symbol}?limit=40&apikey={FMP_API_KEY}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data)
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values('date', ascending=False)
+                return df
+        return None
+    except:
+        return None
+
+def get_fmp_metrics_for_date(symbol, ref_date):
+    """Belirli bir tarih için FMP'den en yakın finansal metrikleri döndürür"""
+    ratios_df = get_fmp_historical_ratios(symbol)
+    growth_df = get_fmp_historical_growth(symbol)
+    analyst_df = get_fmp_analyst_estimates(symbol)
+    
+    metrics = {
+        'pe_ratio': None,
+        'ps_ratio': None,
+        'revenue_growth': None,
+        'profit_margin': None,
+        'analyst_revision': None
+    }
+    
+    ref_date_dt = pd.Timestamp(ref_date)
+    
+    if ratios_df is not None and len(ratios_df) > 0:
+        past_ratios = ratios_df[ratios_df['date'] <= ref_date_dt]
+        if len(past_ratios) > 0:
+            latest = past_ratios.iloc[0]
+            metrics['pe_ratio'] = latest.get('priceEarningsRatio', None)
+            metrics['ps_ratio'] = latest.get('priceToSalesRatio', None)
+            metrics['profit_margin'] = latest.get('netProfitMargin', None)
+    
+    if growth_df is not None and len(growth_df) > 0:
+        past_growth = growth_df[growth_df['date'] <= ref_date_dt]
+        if len(past_growth) > 0:
+            latest = past_growth.iloc[0]
+            metrics['revenue_growth'] = latest.get('revenueGrowth', None)
+    
+    if analyst_df is not None and len(analyst_df) > 0:
+        past_estimates = analyst_df[analyst_df['date'] <= ref_date_dt]
+        if len(past_estimates) >= 2:
+            current = past_estimates.iloc[0]
+            previous = past_estimates.iloc[1]
+            curr_eps = current.get('estimatedEpsAvg', None)
+            prev_eps = previous.get('estimatedEpsAvg', None)
+            if curr_eps is not None and prev_eps is not None and prev_eps != 0:
+                revision_change = ((curr_eps - prev_eps) / abs(prev_eps)) * 100
+                metrics['analyst_revision'] = revision_change
+        elif len(past_estimates) == 1:
+            curr_eps = past_estimates.iloc[0].get('estimatedEpsAvg', None)
+            if curr_eps is not None:
+                metrics['analyst_revision'] = 0
+    
+    return metrics
+
+def calculate_fmp_stock_scores_for_sector(symbols, ref_date):
+    """Bir sektördeki tüm hisseler için 5 kriterli ham puanları hesaplar ve normalize eder"""
+    raw_data = []
+    
+    for symbol in symbols:
+        metrics = get_fmp_metrics_for_date(symbol, ref_date)
+        momentum = get_historical_momentum_score(symbol, ref_date)
+        
+        pe = metrics.get('pe_ratio')
+        valuation_raw = 100 - min(pe, 100) if pe is not None and pe > 0 else 50
+        
+        rev_growth = metrics.get('revenue_growth')
+        growth_raw = rev_growth * 100 if rev_growth is not None else 0
+        
+        profit = metrics.get('profit_margin')
+        profit_raw = profit * 100 if profit is not None else 0
+        
+        momentum_raw = momentum if momentum is not None else 0
+        
+        revision = metrics.get('analyst_revision')
+        revision_raw = revision if revision is not None else 0
+        
+        raw_data.append({
+            'symbol': symbol,
+            '_valuation': valuation_raw,
+            '_growth': growth_raw,
+            '_profitability': profit_raw,
+            '_momentum': momentum_raw,
+            '_revision': revision_raw
+        })
+    
+    if not raw_data:
+        return []
+    
+    valuations = normalize_score([d['_valuation'] for d in raw_data])
+    growths = normalize_score([d['_growth'] for d in raw_data])
+    profits = normalize_score([d['_profitability'] for d in raw_data])
+    momentums = normalize_score([d['_momentum'] for d in raw_data])
+    revisions = normalize_score([d['_revision'] for d in raw_data])
+    
+    scored_data = []
+    for i, d in enumerate(raw_data):
+        val_puan = valuations[i] * 0.20
+        buy_puan = growths[i] * 0.20
+        kar_puan = profits[i] * 0.20
+        mom_puan = momentums[i] * 0.20
+        rev_puan = revisions[i] * 0.20
+        toplam = val_puan + buy_puan + kar_puan + mom_puan + rev_puan
+        
+        scored_data.append({
+            'symbol': d['symbol'],
+            'score': toplam
+        })
+    
+    return sorted(scored_data, key=lambda x: x['score'], reverse=True)
+
+def run_fmp_backtest_simulation(start_date, interval_days, period_key):
+    """FMP verileriyle tam 5 kriterli backtesting simülasyonu - canlı sistemle aynı mantık"""
+    results = []
+    portfolio_value = 100.0
+    current_date = start_date
+    today = datetime.now().date()
+    
+    lookback_days = PERIOD_LOOKBACK_DAYS.get(period_key, 30)
+    
+    while current_date < today:
+        next_date = current_date + timedelta(days=interval_days)
+        if next_date > today:
+            next_date = today
+        
+        sector_performances = []
+        for name, symbol in SECTOR_ETFS.items():
+            lookback_start = current_date - timedelta(days=lookback_days)
+            perf = get_historical_sector_performance(symbol, lookback_start, current_date)
+            sector_performances.append({"Sektör": name, "Performans": perf, "ETF": symbol})
+        
+        sector_df = pd.DataFrame(sector_performances)
+        sector_df = sector_df.sort_values(by="Performans", ascending=False)
+        top_6 = sector_df.head(6)
+        
+        sector_candidates = {}
+        sector_quotas = {}
+        
+        for idx, (_, row) in enumerate(top_6.iterrows()):
+            sector_name = row["Sektör"]
+            etf_symbol = row["ETF"]
+            holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+            
+            scored_stocks = calculate_fmp_stock_scores_for_sector(holdings, current_date)
+            sector_candidates[sector_name] = scored_stocks
+            sector_quotas[sector_name] = 2 if idx < 4 else 1
+        
+        symbol_best_sector = {}
+        for sector_name, candidates in sector_candidates.items():
+            for candidate in candidates:
+                symbol = candidate['symbol']
+                score = candidate['score']
+                if symbol not in symbol_best_sector or score > symbol_best_sector[symbol]['score']:
+                    symbol_best_sector[symbol] = {'sector': sector_name, 'score': score}
+        
+        final_picks = []
+        used_symbols = set()
+        
+        for sector_name in sector_quotas.keys():
+            quota = sector_quotas[sector_name]
+            candidates = sector_candidates[sector_name]
+            selected = 0
+            
+            for candidate in candidates:
+                if selected >= quota:
+                    break
+                symbol = candidate['symbol']
+                
+                if symbol in used_symbols:
+                    continue
+                
+                if symbol_best_sector[symbol]['sector'] == sector_name:
+                    final_picks.append(symbol)
+                    used_symbols.add(symbol)
+                    selected += 1
+            
+            for candidate in candidates:
+                if selected >= quota:
+                    break
+                symbol = candidate['symbol']
+                if symbol not in used_symbols:
+                    final_picks.append(symbol)
+                    used_symbols.add(symbol)
+                    selected += 1
+        
+        if final_picks:
+            returns = []
+            for symbol in final_picks:
+                ret = get_historical_stock_return(symbol, current_date, next_date)
+                if ret is not None:
+                    returns.append(ret)
+            
+            if returns:
+                avg_return = sum(returns) / len(returns)
+                portfolio_value = portfolio_value * (1 + avg_return / 100)
+        
+        results.append({
+            "Tarih": current_date,
+            "Portföy Değeri": round(portfolio_value, 2),
+            "Seçilen Hisse": len(final_picks)
+        })
+        
+        current_date = next_date
+    
+    return pd.DataFrame(results)
+
 def get_historical_sector_performance(etf_symbol, start_date, end_date):
     """Belirli tarih aralığında sektör performansını hesaplar (bir gün önceki veri)"""
     try:
@@ -818,13 +1076,27 @@ else:
 
 st.divider()
 
-st.header("📈 Momentum Strateji Testi")
-st.warning("""**Bu Nedir?**
-Sektör performansı + fiyat momentumu bazlı alternatif bir strateji testidir.
+st.header("📈 Strateji Performans Testi")
 
-**Neden Farklı?** Tarihsel P/E, gelir büyümesi ve analist revizyonları verileri mevcut değildir. Bu nedenle canlı sistemin 5 kriterli puanlaması geçmişe uygulanamaz.
+backtest_method = st.radio(
+    "Test Yöntemi Seçin:",
+    options=["5 Kriterli Tam Analiz (FMP API)", "Momentum Bazlı Basit Test"],
+    horizontal=True,
+    help="5 Kriterli analiz FMP API kullanır ve daha doğru sonuçlar verir"
+)
 
-**Sonuçlar:** Sadece momentum stratejisinin performansını gösterir, canlı önerilerle karşılaştırılamaz.""")
+if backtest_method == "5 Kriterli Tam Analiz (FMP API)":
+    if FMP_API_KEY:
+        st.success("✅ FMP API bağlantısı aktif - Tam 5 kriterli analiz kullanılacak")
+        st.info("""**5 Kriter:** Değerleme (P/E), Büyüme (gelir), Karlılık (net marj), Momentum (fiyat), Revizyonlar (EPS büyümesi)
+        
+Bu test, canlı sistemdeki aynı kriterleri tarihsel verilere uygular.""")
+    else:
+        st.error("❌ FMP API anahtarı bulunamadı. Lütfen FMP_API_KEY ortam değişkenini ayarlayın.")
+else:
+    st.warning("""**Momentum Bazlı Test:** Sadece sektör performansı + fiyat momentumu kullanır.
+    
+Tarihsel P/E, gelir büyümesi gibi temel veriler dahil edilmez.""")
 
 col_bt1, col_bt2, col_bt3 = st.columns(3)
 
@@ -853,8 +1125,12 @@ with col_bt3:
 if run_backtest:
     interval_days = BACKTEST_INTERVALS[backtest_interval]
     
-    with st.spinner("Simülasyon çalışıyor... Bu işlem biraz zaman alabilir."):
-        backtest_results = run_backtest_simulation(backtest_start, interval_days, selected_period)
+    if backtest_method == "5 Kriterli Tam Analiz (FMP API)" and FMP_API_KEY:
+        with st.spinner("5 kriterli simülasyon çalışıyor... FMP verileri çekiliyor, bu işlem biraz zaman alabilir."):
+            backtest_results = run_fmp_backtest_simulation(backtest_start, interval_days, selected_period)
+    else:
+        with st.spinner("Momentum simülasyonu çalışıyor..."):
+            backtest_results = run_backtest_simulation(backtest_start, interval_days, selected_period)
     
     if not backtest_results.empty:
         final_value = backtest_results["Portföy Değeri"].iloc[-1]
@@ -877,8 +1153,9 @@ if run_backtest:
         
         fig_backtest.add_hline(y=100, line_dash="dash", line_color="gray", annotation_text="Başlangıç: $100")
         
+        method_label = "5 Kriterli" if (backtest_method == "5 Kriterli Tam Analiz (FMP API)" and FMP_API_KEY) else "Momentum"
         fig_backtest.update_layout(
-            title=f"Portföy Performansı ({backtest_start} - Bugün)",
+            title=f"{method_label} Strateji Performansı ({backtest_start} - Bugün)",
             xaxis_title="Tarih",
             yaxis_title="Portföy Değeri ($)",
             template="plotly_dark",

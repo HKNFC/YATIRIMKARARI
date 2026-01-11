@@ -2,7 +2,7 @@
 
 ## Overview
 
-Morning Alpha is an investment decision support dashboard built with Streamlit. The application provides market analysis, sector opportunities tracking, portfolio management, and price alerts for investors. It's designed as a Turkish-language financial dashboard that helps users monitor market health (via VIX index), track sector performance, manage stock portfolios, and set price alerts.
+Morning Alpha is an investment decision support dashboard built with Streamlit. The application provides market analysis, sector opportunities tracking, portfolio management, price alerts, and strategy backtesting for investors. It's designed as a Turkish-language financial dashboard that helps users monitor market health (via VIX index), track sector performance, manage stock portfolios, set price alerts, and test investment strategies with historical data.
 
 ## User Preferences
 
@@ -24,16 +24,26 @@ Preferred communication style: Simple, everyday language.
 - **Session Management**: SQLAlchemy sessionmaker for database connections
 
 ### Data Flow
-1. Market data fetched via yfinance library
-2. Data processed and displayed through Streamlit components
-3. User portfolio and alerts persisted to PostgreSQL database
-4. Dashboard auto-refreshes based on user-selected interval
+1. Market data fetched via yfinance library (real-time prices, momentum)
+2. Historical fundamental data fetched via Financial Modeling Prep (FMP) API
+3. Data processed and displayed through Streamlit components
+4. User portfolio and alerts persisted to PostgreSQL database
+5. Dashboard auto-refreshes based on user-selected interval
 
 ### Key Features
 - Market health indicator (VIX-based risk assessment)
 - Sector analysis with money flow tracking
-- Portfolio management with buy price tracking
+- Dynamic stock recommendations with 5-criterion scoring (20% each):
+  - Valuation (P/E ratio)
+  - Growth (Revenue growth)
+  - Profitability (Net profit margin)
+  - Momentum (Price momentum)
+  - Revisions (Analyst EPS estimate changes)
+- Portfolio management with buy price tracking and profit/loss calculation
 - Price alert system with trigger notifications
+- Strategy backtesting with two modes:
+  - 5-Criterion Full Analysis (FMP API): Uses historical fundamental data
+  - Momentum-based Simple Test: Uses only price momentum
 
 ## External Dependencies
 
@@ -43,14 +53,18 @@ Preferred communication style: Simple, everyday language.
 
 ### Market Data
 - **yfinance**: Yahoo Finance API wrapper for real-time stock and market data (VIX, SPY, individual stocks)
+- **Financial Modeling Prep (FMP) API**: Historical financial ratios, growth metrics, and analyst estimates for backtesting
 
 ### Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
+- `FMP_API_KEY`: Financial Modeling Prep API key (required for 5-criterion backtesting)
 
 ### Python Packages
 - streamlit: Web dashboard framework
 - pandas: Data manipulation
 - plotly: Interactive visualizations
 - yfinance: Market data fetching
+- requests: HTTP requests for FMP API
 - sqlalchemy: Database ORM
+- psycopg2-binary: PostgreSQL adapter
 - streamlit-autorefresh: Auto-refresh functionality
