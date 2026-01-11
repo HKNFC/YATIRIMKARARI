@@ -48,6 +48,34 @@ Session = sessionmaker(bind=engine)
 def get_session():
     return Session()
 
+NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY")
+
+@st.cache_data(ttl=900)
+def fetch_market_news(market="US"):
+    """Fetch financial news for the selected market (cached for 15 minutes)"""
+    if not NEWSAPI_KEY:
+        return None
+    
+    try:
+        if market == "US":
+            url = f"https://newsapi.org/v2/top-headlines?country=us&category=business&pageSize=5&apiKey={NEWSAPI_KEY}"
+        else:
+            url = f"https://newsapi.org/v2/everything?q=borsa+istanbul+OR+BIST+OR+türk+ekonomi&language=tr&sortBy=publishedAt&pageSize=5&apiKey={NEWSAPI_KEY}"
+        
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            articles = data.get("articles", [])
+            news_items = []
+            for article in articles[:5]:
+                title = article.get("title", "")
+                if title and title != "[Removed]":
+                    news_items.append(title[:100] + "..." if len(title) > 100 else title)
+            return news_items if news_items else None
+        return None
+    except Exception:
+        return None
+
 @st.cache_data(ttl=60)
 def get_vix_data():
     try:
@@ -1530,19 +1558,26 @@ with st.form("add_alert_form"):
 
 st.divider()
 
-st.sidebar.header("🗓️ Günlük Finansal Notlar")
-if selected_market == "US":
-    st.sidebar.info("""
-- **Fed Kararı:** Faizlerde sabit kalma beklentisi %85.
-- **Trend:** AI çiplerinden veri merkezi altyapısına rotasyon var.
-- **Dikkat:** Bugün NVIDIA bilançosu sonrası volatilite artabilir.
-""")
+st.sidebar.header("🗓️ Günlük Finansal Haberler")
+news_items = fetch_market_news(selected_market)
+if news_items:
+    news_text = "\n".join([f"- {item}" for item in news_items])
+    st.sidebar.info(news_text)
+    st.sidebar.caption("📡 NewsAPI - Her 15 dakikada güncellenir")
 else:
-    st.sidebar.info("""
+    if selected_market == "US":
+        st.sidebar.info("""
+- **Fed Kararı:** Faizlerde sabit kalma beklentisi.
+- **Trend:** AI çiplerinden veri merkezi altyapısına rotasyon var.
+- **Dikkat:** Teknoloji bilançoları volatiliteyi artırabilir.
+""")
+    else:
+        st.sidebar.info("""
 - **TCMB:** Faiz kararı takip edilmeli.
 - **Trend:** Bankacılık ve holding hisseleri öne çıkıyor.
 - **Dikkat:** Dolar/TL paritesi volatiliteyi etkiliyor.
 """)
+    st.sidebar.caption("⚠️ Haber servisi bağlanamadı - varsayılan notlar")
 
 st.sidebar.divider()
 

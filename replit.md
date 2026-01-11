@@ -58,6 +58,7 @@ Preferred communication style: Simple, everyday language.
 ### Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `FMP_API_KEY`: Financial Modeling Prep API key (required for 5-criterion backtesting)
+- `NEWSAPI_KEY`: NewsAPI key for automatic financial news fetching (optional, falls back to static notes)
 
 ### Python Packages
 - streamlit: Web dashboard framework
