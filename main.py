@@ -220,12 +220,12 @@ def get_sector_holdings_data(etf_symbol):
     
     final_data = []
     for i, d in enumerate(raw_data):
-        val_puan = round(valuations[i] * 0.20, 1)
-        buy_puan = round(growths[i] * 0.20, 1)
-        kar_puan = round(profits[i] * 0.20, 1)
-        mom_puan = round(momentums[i] * 0.20, 1)
-        rev_puan = round(revisions[i] * 0.20, 1)
-        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
+        val_puan = round(valuations[i] * 0.20, 2)
+        buy_puan = round(growths[i] * 0.20, 2)
+        kar_puan = round(profits[i] * 0.20, 2)
+        mom_puan = round(momentums[i] * 0.20, 2)
+        rev_puan = round(revisions[i] * 0.20, 2)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 2)
         
         final_data.append({
             "Sembol": d["Sembol"],
@@ -303,12 +303,12 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
     
     final_data = []
     for i, d in enumerate(raw_data):
-        val_puan = round(valuations[i] * 0.20, 1)
-        buy_puan = round(growths[i] * 0.20, 1)
-        kar_puan = round(profits[i] * 0.20, 1)
-        mom_puan = round(momentums[i] * 0.20, 1)
-        rev_puan = round(revisions[i] * 0.20, 1)
-        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
+        val_puan = round(valuations[i] * 0.20, 2)
+        buy_puan = round(growths[i] * 0.20, 2)
+        kar_puan = round(profits[i] * 0.20, 2)
+        mom_puan = round(momentums[i] * 0.20, 2)
+        rev_puan = round(revisions[i] * 0.20, 2)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 2)
         
         final_data.append({
             "Sembol": d["Sembol"],
@@ -380,12 +380,12 @@ def get_all_sector_candidates(etf_symbol, sector_name):
     
     final_data = []
     for i, d in enumerate(raw_data):
-        val_puan = round(valuations[i] * 0.20, 1)
-        buy_puan = round(growths[i] * 0.20, 1)
-        kar_puan = round(profits[i] * 0.20, 1)
-        mom_puan = round(momentums[i] * 0.20, 1)
-        rev_puan = round(revisions[i] * 0.20, 1)
-        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
+        val_puan = round(valuations[i] * 0.20, 2)
+        buy_puan = round(growths[i] * 0.20, 2)
+        kar_puan = round(profits[i] * 0.20, 2)
+        mom_puan = round(momentums[i] * 0.20, 2)
+        rev_puan = round(revisions[i] * 0.20, 2)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 2)
         
         final_data.append({
             "Sembol": d["Sembol"],
