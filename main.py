@@ -76,15 +76,45 @@ PERIOD_OPTIONS = {
     "1 Yıl": ("400d", 252)
 }
 
+SECTOR_ETFS = {
+    "Yapay Zeka (BOTZ)": "BOTZ",
+    "Siber Güvenlik (HACK)": "HACK",
+    "Yenilenebilir Enerji (ICLN)": "ICLN",
+    "Fintech (FINX)": "FINX",
+    "Biyoteknoloji (XBI)": "XBI",
+    "Teknoloji (XLK)": "XLK",
+    "Sağlık (XLV)": "XLV",
+    "Finans (XLF)": "XLF",
+    "Enerji (XLE)": "XLE",
+    "Tüketici (XLY)": "XLY",
+    "Sanayi (XLI)": "XLI",
+    "Malzeme (XLB)": "XLB",
+    "Gayrimenkul (XLRE)": "XLRE",
+    "İletişim (XLC)": "XLC",
+    "Yarı İletken (SMH)": "SMH"
+}
+
+SECTOR_HOLDINGS = {
+    "BOTZ": ["NVDA", "ISRG", "INTC", "ABBV", "TER"],
+    "HACK": ["CRWD", "PANW", "FTNT", "ZS", "OKTA"],
+    "ICLN": ["ENPH", "FSLR", "SEDG", "RUN", "PLUG"],
+    "FINX": ["SQ", "PYPL", "INTU", "FIS", "FISV"],
+    "XBI": ["MRNA", "VRTX", "REGN", "BIIB", "GILD"],
+    "XLK": ["AAPL", "MSFT", "NVDA", "AVGO", "CRM"],
+    "XLV": ["UNH", "JNJ", "LLY", "PFE", "ABBV"],
+    "XLF": ["BRK-B", "JPM", "V", "MA", "BAC"],
+    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "XLY": ["AMZN", "TSLA", "HD", "MCD", "NKE"],
+    "XLI": ["CAT", "UNP", "HON", "BA", "GE"],
+    "XLB": ["LIN", "APD", "SHW", "ECL", "DD"],
+    "XLRE": ["PLD", "AMT", "EQIX", "CCI", "SPG"],
+    "XLC": ["META", "GOOGL", "NFLX", "DIS", "T"],
+    "SMH": ["NVDA", "TSM", "AVGO", "ASML", "AMD"]
+}
+
 @st.cache_data(ttl=60)
 def get_sector_data(period_key="1 Gün"):
-    sector_etfs = {
-        "Yapay Zeka (BOTZ)": "BOTZ",
-        "Siber Güvenlik (HACK)": "HACK",
-        "Yenilenebilir Enerji (ICLN)": "ICLN",
-        "Fintech (FINX)": "FINX",
-        "Biyoteknoloji (XBI)": "XBI"
-    }
+    sector_etfs = SECTOR_ETFS
     
     fetch_period, lookback_days = PERIOD_OPTIONS.get(period_key, ("2d", 1))
     
@@ -125,6 +155,42 @@ def get_stock_price(symbol):
         return None, None
     except:
         return None, None
+
+@st.cache_data(ttl=60)
+def get_sector_holdings_data(etf_symbol):
+    holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+    data = []
+    for symbol in holdings:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="5d")
+            info = ticker.info
+            company_name = info.get("shortName", symbol)
+            if len(hist) >= 2:
+                current = hist['Close'].iloc[-1]
+                previous = hist['Close'].iloc[-2]
+                change = ((current - previous) / previous) * 100
+                data.append({
+                    "Sembol": symbol,
+                    "Şirket": company_name[:25],
+                    "Fiyat ($)": round(current, 2),
+                    "Değişim (%)": round(change, 2)
+                })
+            elif len(hist) == 1:
+                data.append({
+                    "Sembol": symbol,
+                    "Şirket": company_name[:25],
+                    "Fiyat ($)": round(hist['Close'].iloc[-1], 2),
+                    "Değişim (%)": 0
+                })
+        except:
+            data.append({
+                "Sembol": symbol,
+                "Şirket": symbol,
+                "Fiyat ($)": "-",
+                "Değişim (%)": 0
+            })
+    return pd.DataFrame(data)
 
 @st.cache_data(ttl=60)
 def get_portfolio_data():
@@ -297,26 +363,50 @@ selected_period = st.radio(
 with st.spinner("Sektör verileri yükleniyor..."):
     sector_data = get_sector_data(selected_period)
 
+sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
+
+fig = go.Figure(go.Bar(
+    x=sorted_sector_data["Sektör"],
+    y=sorted_sector_data["Değişim (%)"],
+    marker_color=['green' if x > 0 else 'red' for x in sorted_sector_data["Değişim (%)"]],
+    text=[f"{x:+.2f}%" for x in sorted_sector_data["Değişim (%)"]],
+    textposition='outside'
+))
+fig.update_layout(
+    title=f"Sektör ETF Performansı ({selected_period})",
+    yaxis_title=f"Değişim ({selected_period}) (%)",
+    showlegend=False,
+    height=400
+)
+st.plotly_chart(fig, use_container_width=True)
+
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
-    st.write(f"Sektörel Para Akışı ({selected_period})")
-    st.dataframe(sector_data.sort_values(by="Değişim (%)", ascending=False), hide_index=True)
+    st.subheader(f"📊 Sektörel Para Akışı ({selected_period})")
+    st.dataframe(sorted_sector_data, hide_index=True, use_container_width=True)
 
 with col_right:
-    fig = go.Figure(go.Bar(
-        x=sector_data["Sektör"],
-        y=sector_data["Değişim (%)"],
-        marker_color=['green' if x > 0 else 'red' for x in sector_data["Değişim (%)"]],
-        text=[f"{x:+.2f}%" for x in sector_data["Değişim (%)"]],
-        textposition='outside'
-    ))
-    fig.update_layout(
-        title=f"Sektör ETF Performansı ({selected_period})",
-        yaxis_title=f"Değişim ({selected_period}) (%)",
-        showlegend=False
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    st.subheader("🔍 Sektör Detayı")
+    sector_options = list(SECTOR_ETFS.keys())
+    selected_sector = st.selectbox("Sektör Seçin:", sector_options, key="sector_select")
+    
+    if selected_sector:
+        etf_symbol = SECTOR_ETFS[selected_sector]
+        with st.spinner(f"{selected_sector} şirketleri yükleniyor..."):
+            holdings_data = get_sector_holdings_data(etf_symbol)
+        
+        if not holdings_data.empty:
+            def color_holdings(val):
+                if isinstance(val, (int, float)):
+                    color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+                    return f'color: {color}'
+                return ''
+            
+            styled_holdings = holdings_data.style.map(color_holdings, subset=['Değişim (%)'])
+            st.dataframe(styled_holdings, hide_index=True, use_container_width=True)
+        else:
+            st.info("Bu sektör için şirket verisi bulunamadı.")
 
 st.divider()
 
