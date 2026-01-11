@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
@@ -21,6 +21,16 @@ class UserPortfolio(Base):
     quantity = Column(Float, default=1)
     buy_price = Column(Float)
     added_at = Column(DateTime, default=datetime.now)
+
+class PriceAlert(Base):
+    __tablename__ = 'price_alerts'
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(10), nullable=False)
+    alert_type = Column(String(20), nullable=False)
+    target_price = Column(Float, nullable=False)
+    is_triggered = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+    triggered_at = Column(DateTime, nullable=True)
 
 Base.metadata.create_all(engine, checkfirst=True)
 Session = sessionmaker(bind=engine)
@@ -149,6 +159,91 @@ def remove_stock_from_portfolio(stock_id):
         return False
     finally:
         session.close()
+
+def get_alerts():
+    session = get_session()
+    try:
+        alerts = session.query(PriceAlert).filter(PriceAlert.is_triggered == False).all()
+        return alerts
+    finally:
+        session.close()
+
+def get_triggered_alerts():
+    session = get_session()
+    try:
+        alerts = session.query(PriceAlert).filter(PriceAlert.is_triggered == True).order_by(PriceAlert.triggered_at.desc()).limit(10).all()
+        return alerts
+    finally:
+        session.close()
+
+def add_alert(symbol, alert_type, target_price):
+    session = get_session()
+    try:
+        alert = PriceAlert(
+            symbol=symbol.upper(),
+            alert_type=alert_type,
+            target_price=target_price
+        )
+        session.add(alert)
+        session.commit()
+        return True
+    except:
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+def remove_alert(alert_id):
+    session = get_session()
+    try:
+        alert = session.query(PriceAlert).filter(PriceAlert.id == alert_id).first()
+        if alert:
+            session.delete(alert)
+            session.commit()
+            return True
+        return False
+    except:
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+def check_and_trigger_alerts():
+    session = get_session()
+    triggered = []
+    try:
+        alerts = session.query(PriceAlert).filter(PriceAlert.is_triggered == False).all()
+        for alert in alerts:
+            current_price, _ = get_stock_price(alert.symbol)
+            if current_price:
+                should_trigger = False
+                if alert.alert_type == "above" and current_price >= alert.target_price:
+                    should_trigger = True
+                elif alert.alert_type == "below" and current_price <= alert.target_price:
+                    should_trigger = True
+                
+                if should_trigger:
+                    alert.is_triggered = True
+                    alert.triggered_at = datetime.now()
+                    triggered.append({
+                        "symbol": alert.symbol,
+                        "type": alert.alert_type,
+                        "target": alert.target_price,
+                        "current": current_price
+                    })
+        session.commit()
+        return triggered
+    except:
+        session.rollback()
+        return []
+    finally:
+        session.close()
+
+triggered_alerts = check_and_trigger_alerts()
+if triggered_alerts:
+    for alert in triggered_alerts:
+        direction = "yukari cikti" if alert["type"] == "above" else "asagi dustu"
+        st.toast(f"🚨 ALARM: {alert['symbol']} ${alert['target']:.2f} seviyesinin {direction}! Guncel: ${alert['current']:.2f}", icon="🔔")
 
 with st.spinner("Piyasa verileri yükleniyor..."):
     vix_val, vix_change = get_vix_data()
@@ -313,12 +408,92 @@ with st.form("add_stock_form"):
 
 st.divider()
 
+st.header("🔔 Fiyat Alarmları")
+
+active_alerts = get_alerts()
+triggered_history = get_triggered_alerts()
+
+col_alerts1, col_alerts2 = st.columns(2)
+
+with col_alerts1:
+    st.subheader("Aktif Alarmlar")
+    if active_alerts:
+        for alert in active_alerts:
+            current_price, _ = get_stock_price(alert.symbol)
+            direction = "yukarı" if alert.alert_type == "above" else "aşağı"
+            icon = "📈" if alert.alert_type == "above" else "📉"
+            
+            col_a, col_b = st.columns([4, 1])
+            with col_a:
+                st.write(f"{icon} **{alert.symbol}**: ${alert.target_price:.2f} {direction} (Güncel: ${current_price:.2f if current_price else 0:.2f})")
+            with col_b:
+                if st.button("❌", key=f"del_alert_{alert.id}"):
+                    if remove_alert(alert.id):
+                        st.rerun()
+    else:
+        st.info("Aktif alarm bulunmuyor.")
+
+with col_alerts2:
+    st.subheader("Tetiklenen Alarmlar")
+    if triggered_history:
+        for alert in triggered_history:
+            direction = "yukarı çıktı" if alert.alert_type == "above" else "aşağı düştü"
+            icon = "✅"
+            triggered_time = alert.triggered_at.strftime("%d/%m %H:%M") if alert.triggered_at else "-"
+            st.write(f"{icon} **{alert.symbol}**: ${alert.target_price:.2f} {direction} ({triggered_time})")
+    else:
+        st.info("Henüz tetiklenen alarm yok.")
+
+st.subheader("Yeni Alarm Ekle")
+
+with st.form("add_alert_form"):
+    col_alert_form1, col_alert_form2, col_alert_form3 = st.columns(3)
+    
+    with col_alert_form1:
+        alert_symbol = st.text_input("Hisse Sembolü", max_chars=10, key="alert_symbol")
+    
+    with col_alert_form2:
+        alert_type = st.selectbox("Alarm Tipi", [
+            ("above", "Fiyat Yukarı Çıkarsa"),
+            ("below", "Fiyat Aşağı Düşerse")
+        ], format_func=lambda x: x[1])
+    
+    with col_alert_form3:
+        alert_price = st.number_input("Hedef Fiyat ($)", min_value=0.01, value=100.0, step=0.01)
+    
+    alert_submitted = st.form_submit_button("🔔 Alarm Ekle", type="primary")
+    
+    if alert_submitted:
+        if alert_symbol:
+            current_price, _ = get_stock_price(alert_symbol.upper())
+            if current_price:
+                if add_alert(alert_symbol, alert_type[0], alert_price):
+                    st.success(f"{alert_symbol.upper()} için alarm eklendi! Hedef: ${alert_price:.2f}")
+                    st.rerun()
+                else:
+                    st.error("Alarm eklenirken bir hata oluştu.")
+            else:
+                st.error(f"{alert_symbol.upper()} sembolü bulunamadı.")
+        else:
+            st.warning("Lütfen hisse sembolü girin.")
+
+st.divider()
+
 st.sidebar.header("🗓️ Günlük Finansal Notlar")
 st.sidebar.info("""
 - **Fed Kararı:** Faizlerde sabit kalma beklentisi %85.
 - **Trend:** AI çiplerinden veri merkezi altyapısına rotasyon var.
 - **Dikkat:** Bugün NVIDIA bilançosu sonrası volatilite artabilir.
 """)
+
+st.sidebar.divider()
+
+active_count = len(active_alerts) if active_alerts else 0
+st.sidebar.header(f"🔔 Alarmlar ({active_count} aktif)")
+if active_alerts:
+    for alert in active_alerts[:5]:
+        direction = "↑" if alert.alert_type == "above" else "↓"
+        st.sidebar.caption(f"{alert.symbol} {direction} ${alert.target_price:.2f}")
 
 st.sidebar.divider()
 st.sidebar.header("📊 Veri Bilgisi")
