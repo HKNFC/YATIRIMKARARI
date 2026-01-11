@@ -410,18 +410,26 @@ with st.spinner("Sektör verileri yükleniyor..."):
 
 sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
 
+max_val = sorted_sector_data["Değişim (%)"].max()
+min_val = sorted_sector_data["Değişim (%)"].min()
+y_max = max_val * 1.25 if max_val > 0 else max_val
+y_min = min_val * 1.25 if min_val < 0 else min_val
+
 fig = go.Figure(go.Bar(
     x=sorted_sector_data["Sektör"],
     y=sorted_sector_data["Değişim (%)"],
     marker_color=['green' if x > 0 else 'red' for x in sorted_sector_data["Değişim (%)"]],
     text=[f"{x:+.2f}%" for x in sorted_sector_data["Değişim (%)"]],
-    textposition='outside'
+    textposition='outside',
+    textfont=dict(size=11)
 ))
 fig.update_layout(
     title=f"Sektör ETF Performansı ({selected_period})",
     yaxis_title=f"Değişim ({selected_period}) (%)",
     showlegend=False,
-    height=400
+    height=500,
+    yaxis=dict(range=[y_min, y_max]),
+    margin=dict(t=60, b=80)
 )
 st.plotly_chart(fig, use_container_width=True)
 
