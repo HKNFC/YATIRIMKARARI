@@ -36,4 +36,4 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["streamlit", "run", "main.py", "--server.port", "8080", "--server.address", "0.0.0.0", "--server.headless", "true", "--server.enableCORS", "false"]
+run = ["streamlit", "run", "main.py", "--server.port", "5000", "--server.address", "0.0.0.0", "--server.headless", "true", "--server.enableCORS", "false"]
