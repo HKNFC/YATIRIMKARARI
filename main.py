@@ -320,16 +320,24 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
     sorted_data = sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
     return sorted_data[:count]
 
+PORTFOLIO_PERIODS = {
+    "5 Gün": ("7d", 5),
+    "15 Gün": ("20d", 15),
+    "1 Ay": ("35d", 22),
+    "6 Ay": ("200d", 126)
+}
+
 @st.cache_data(ttl=60)
-def get_all_sector_candidates(etf_symbol, sector_name):
+def get_all_sector_candidates(etf_symbol, sector_name, period_key="5 Gün"):
     """Bir sektördeki tüm adayları puanlarıyla döndürür"""
     holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+    fetch_period, lookback_days = PORTFOLIO_PERIODS.get(period_key, ("7d", 5))
     raw_data = []
     
     for symbol in holdings:
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="10d")
+            hist = ticker.history(period=fetch_period)
             info = ticker.info
             company_name = info.get("shortName", symbol)
             
@@ -344,11 +352,11 @@ def get_all_sector_candidates(etf_symbol, sector_name):
                 previous = hist['Close'].iloc[-2]
                 daily_change = ((current - previous) / previous) * 100
                 
-                if len(hist) >= 5:
-                    week_ago = hist['Close'].iloc[0]
-                    momentum = ((current - week_ago) / week_ago) * 100
+                if len(hist) > lookback_days:
+                    period_start = hist['Close'].iloc[-(lookback_days + 1)]
                 else:
-                    momentum = daily_change
+                    period_start = hist['Close'].iloc[0]
+                momentum = ((current - period_start) / period_start) * 100
                 
                 valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
                 
@@ -402,8 +410,9 @@ def get_all_sector_candidates(etf_symbol, sector_name):
     return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
 
 @st.cache_data(ttl=60)
-def get_portfolio_data():
-    sector_df = get_sector_data("1 Gün")
+def get_portfolio_data(period_key="5 Gün"):
+    sector_period_map = {"5 Gün": "5 Gün", "15 Gün": "15 Gün", "1 Ay": "1 Ay", "6 Ay": "6 Ay"}
+    sector_df = get_sector_data(sector_period_map.get(period_key, "5 Gün"))
     sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
     
     top_6_sectors = sector_df.head(6)
@@ -416,7 +425,7 @@ def get_portfolio_data():
         etf_symbol = SECTOR_ETFS.get(sector_name, "")
         rank = list(top_6_sectors.index).index(idx) + 1
         
-        candidates = get_all_sector_candidates(etf_symbol, sector_name)
+        candidates = get_all_sector_candidates(etf_symbol, sector_name, period_key)
         sector_candidates[sector_name] = candidates
         sector_quotas[sector_name] = 2 if rank <= 4 else 1
     
@@ -676,10 +685,21 @@ if selected_sector:
 st.divider()
 
 st.header("🎯 Sistemin Sizin İçin Seçtikleri")
-st.success("**En iyi 10 hisse önerisi**")
+
+portfolio_period_col1, portfolio_period_col2 = st.columns([3, 1])
+with portfolio_period_col1:
+    st.success("**En iyi 10 hisse önerisi**")
+with portfolio_period_col2:
+    portfolio_period = st.selectbox(
+        "Periyot",
+        options=list(PORTFOLIO_PERIODS.keys()),
+        index=0,
+        key="portfolio_period_select",
+        label_visibility="collapsed"
+    )
 
 with st.spinner("Hisse verileri yükleniyor..."):
-    portfolio = get_portfolio_data()
+    portfolio = get_portfolio_data(portfolio_period)
 
 if not portfolio.empty:
     def color_portfolio_change(val):
