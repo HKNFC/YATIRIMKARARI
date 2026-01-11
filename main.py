@@ -410,6 +410,9 @@ with st.spinner("Sektör verileri yükleniyor..."):
 
 sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
 
+if "selected_sector_index" not in st.session_state:
+    st.session_state.selected_sector_index = 0
+
 max_val = sorted_sector_data["Değişim (%)"].max()
 min_val = sorted_sector_data["Değişim (%)"].min()
 y_max = max_val * 1.25 if max_val > 0 else max_val
@@ -424,14 +427,24 @@ fig = go.Figure(go.Bar(
     textfont=dict(size=11)
 ))
 fig.update_layout(
-    title=f"Sektör ETF Performansı ({selected_period})",
+    title=f"Sektör ETF Performansı ({selected_period}) - Detay için sektöre tıklayın",
     yaxis_title=f"Değişim ({selected_period}) (%)",
     showlegend=False,
     height=500,
     yaxis=dict(range=[y_min, y_max]),
-    margin=dict(t=60, b=80)
+    margin=dict(t=60, b=80),
+    clickmode='event+select'
 )
-st.plotly_chart(fig, use_container_width=True)
+
+chart_selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="sector_chart")
+
+if chart_selection and chart_selection.selection and chart_selection.selection.points:
+    clicked_point = chart_selection.selection.points[0]
+    clicked_sector = clicked_point.get("x", None)
+    if clicked_sector:
+        sector_options = list(SECTOR_ETFS.keys())
+        if clicked_sector in sector_options:
+            st.session_state.selected_sector_index = sector_options.index(clicked_sector)
 
 col_left, col_right = st.columns([1, 2])
 
@@ -442,7 +455,12 @@ with col_left:
 with col_right:
     st.subheader("🔍 Sektör Detayı")
     sector_options = list(SECTOR_ETFS.keys())
-    selected_sector = st.selectbox("Sektör Seçin:", sector_options, key="sector_select")
+    selected_sector = st.selectbox(
+        "Sektör Seçin:", 
+        sector_options, 
+        index=st.session_state.selected_sector_index,
+        key="sector_select"
+    )
     
     if selected_sector:
         etf_symbol = SECTOR_ETFS[selected_sector]
