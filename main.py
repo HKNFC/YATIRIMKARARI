@@ -95,7 +95,7 @@ SECTOR_ETFS = {
 }
 
 SECTOR_HOLDINGS = {
-    "BOTZ": ["NVDA", "ISRG", "INTC", "TER", "FANUC", "KUKA", "IRBT", "PATH", "CGNX", "ALGN"],
+    "BOTZ": ["NVDA", "ISRG", "INTC", "TER", "IRBT", "PATH", "CGNX", "ALGN", "ROK", "EMR"],
     "HACK": ["CRWD", "PANW", "FTNT", "ZS", "OKTA", "CYBR", "S", "NET", "TENB", "RPD"],
     "ICLN": ["ENPH", "FSLR", "SEDG", "RUN", "PLUG", "NEE", "BE", "CSIQ", "JKS", "NOVA"],
     "FINX": ["SQ", "PYPL", "INTU", "FIS", "FISV", "COIN", "HOOD", "SOFI", "AFRM", "UPST"],
@@ -410,8 +410,8 @@ with st.spinner("Sektör verileri yükleniyor..."):
 
 sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
 
-if "selected_sector_index" not in st.session_state:
-    st.session_state.selected_sector_index = 0
+if "selected_sector_name" not in st.session_state:
+    st.session_state.selected_sector_name = list(SECTOR_ETFS.keys())[0]
 
 max_val = sorted_sector_data["Değişim (%)"].max()
 min_val = sorted_sector_data["Değişim (%)"].min()
@@ -427,40 +427,33 @@ fig = go.Figure(go.Bar(
     textfont=dict(size=11)
 ))
 fig.update_layout(
-    title=f"Sektör ETF Performansı ({selected_period}) - Detay için sektöre tıklayın",
+    title=f"Sektör ETF Performansı ({selected_period})",
     yaxis_title=f"Değişim ({selected_period}) (%)",
     showlegend=False,
     height=500,
     yaxis=dict(range=[y_min, y_max]),
-    margin=dict(t=60, b=80),
-    clickmode='event+select'
+    margin=dict(t=60, b=80)
 )
-
-chart_selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="sector_chart")
-
-if chart_selection and chart_selection.selection and chart_selection.selection.points:
-    clicked_point = chart_selection.selection.points[0]
-    clicked_sector = clicked_point.get("x", None)
-    if clicked_sector:
-        sector_options = list(SECTOR_ETFS.keys())
-        if clicked_sector in sector_options:
-            st.session_state.selected_sector_index = sector_options.index(clicked_sector)
+st.plotly_chart(fig, use_container_width=True)
 
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
     st.subheader(f"📊 Sektörel Para Akışı ({selected_period})")
-    st.dataframe(sorted_sector_data, hide_index=True, use_container_width=True)
+    st.caption("Detay görmek için sektöre tıklayın:")
+    
+    for idx, row in sorted_sector_data.iterrows():
+        sector_name = row["Sektör"]
+        change_val = row["Değişim (%)"]
+        color = "🟢" if change_val > 0 else "🔴" if change_val < 0 else "⚪"
+        
+        if st.button(f"{color} {sector_name}: {change_val:+.2f}%", key=f"btn_{sector_name}", use_container_width=True):
+            st.session_state.selected_sector_name = sector_name
 
 with col_right:
     st.subheader("🔍 Sektör Detayı")
-    sector_options = list(SECTOR_ETFS.keys())
-    selected_sector = st.selectbox(
-        "Sektör Seçin:", 
-        sector_options, 
-        index=st.session_state.selected_sector_index,
-        key="sector_select"
-    )
+    selected_sector = st.session_state.selected_sector_name
+    st.info(f"**Seçili Sektör:** {selected_sector}")
     
     if selected_sector:
         etf_symbol = SECTOR_ETFS[selected_sector]
