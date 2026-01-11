@@ -385,7 +385,12 @@ def get_all_sector_candidates(etf_symbol, sector_name):
             "Şirket": d["Şirket"],
             "Sektör": d["Sektör"],
             "Fiyat ($)": d["Fiyat ($)"],
-            "Günlük Değişim (%)": d["Günlük Değişim (%)"],
+            "Değişim (%)": d["Günlük Değişim (%)"],
+            "Değerleme": val_puan,
+            "Büyüme": buy_puan,
+            "Karlılık": kar_puan,
+            "Momentum": mom_puan,
+            "Revizyon": rev_puan,
             "Toplam Puan": toplam
         })
     
@@ -672,13 +677,13 @@ with st.spinner("Hisse verileri yükleniyor..."):
     portfolio = get_portfolio_data()
 
 if not portfolio.empty:
-    def color_portfolio(val):
+    def color_portfolio_change(val):
         if isinstance(val, (int, float)):
             color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
             return f'color: {color}'
         return ''
     
-    styled_portfolio = portfolio.style.map(color_portfolio, subset=['Günlük Değişim (%)'])
+    styled_portfolio = portfolio.style.map(color_portfolio_change, subset=['Değişim (%)'])
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
 else:
     st.info("Portföy verisi bulunamadı.")
