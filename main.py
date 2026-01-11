@@ -1276,17 +1276,22 @@ if not portfolio.empty:
     
     st.subheader("💼 Portföyüm Olarak Kaydet")
     with st.form("save_system_portfolio_form"):
-        investment_amount = st.number_input(
+        investment_input = st.text_input(
             "Toplam Yatırım Miktarı (USD)",
-            min_value=100,
-            max_value=1000000,
-            value=10000,
-            step=100,
-            help="Bu tutarı sistemin seçtiği hisselere eşit olarak dağıtacağız"
+            value="10.000",
+            help="Bu tutarı sistemin seçtiği hisselere eşit olarak dağıtacağız (örn: 10.000, 25.000, 100.000)"
         )
         save_portfolio_btn = st.form_submit_button("💾 Portföyümü Oluştur", type="primary")
         
         if save_portfolio_btn:
+            try:
+                investment_amount = int(investment_input.replace(".", "").replace(",", ""))
+                if investment_amount < 100:
+                    st.error("Minimum yatırım tutarı $100 olmalıdır.")
+                    st.stop()
+            except ValueError:
+                st.error("Geçerli bir tutar girin (örn: 10.000)")
+                st.stop()
             session = get_session()
             try:
                 session.query(UserPortfolio).delete()
