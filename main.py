@@ -392,8 +392,8 @@ def get_all_sector_candidates(etf_symbol, sector_name):
     return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
 
 @st.cache_data(ttl=60)
-def get_portfolio_data():
-    sector_df = get_sector_data("1 Gün")
+def get_portfolio_data(period_key="1 Gün"):
+    sector_df = get_sector_data(period_key)
     sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
     
     top_6_sectors = sector_df.head(6)
@@ -669,7 +669,7 @@ st.header("🎯 Sistemin Sizin İçin Seçtikleri")
 st.success("**En iyi 10 hisse önerisi**")
 
 with st.spinner("Hisse verileri yükleniyor..."):
-    portfolio = get_portfolio_data()
+    portfolio = get_portfolio_data(selected_period)
 
 if not portfolio.empty:
     def color_portfolio(val):
