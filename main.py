@@ -1273,6 +1273,51 @@ if not portfolio.empty:
     format_dict = {col: "{:.2f}" for col in numeric_cols}
     styled_portfolio = portfolio.style.format(format_dict).map(color_portfolio, subset=['Günlük Değişim (%)'])
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
+    
+    st.subheader("💼 Portföyüm Olarak Kaydet")
+    with st.form("save_system_portfolio_form"):
+        investment_amount = st.number_input(
+            "Toplam Yatırım Miktarı (USD)",
+            min_value=100.0,
+            max_value=1000000.0,
+            value=10000.0,
+            step=100.0,
+            help="Bu tutarı sistemin seçtiği hisselere eşit olarak dağıtacağız"
+        )
+        save_portfolio_btn = st.form_submit_button("💾 Portföyümü Oluştur", type="primary")
+        
+        if save_portfolio_btn:
+            session = get_session()
+            try:
+                session.query(UserPortfolio).delete()
+                session.commit()
+                
+                stock_count = len(portfolio)
+                per_stock_amount = investment_amount / stock_count
+                
+                for _, row in portfolio.iterrows():
+                    symbol = row['Sembol']
+                    price_col = PRICE_COL_NAME
+                    current_price = row[price_col] if price_col in row else row.get('Fiyat ($)', row.get('Fiyat (₺)', 100))
+                    quantity = per_stock_amount / current_price if current_price > 0 else 0
+                    sector = row.get('Sektör', 'Bilinmiyor')
+                    
+                    new_holding = UserPortfolio(
+                        symbol=symbol,
+                        sector=sector,
+                        quantity=quantity,
+                        buy_price=current_price
+                    )
+                    session.add(new_holding)
+                
+                session.commit()
+                st.success(f"✅ {stock_count} hisse ile portföyünüz oluşturuldu! Toplam yatırım: ${investment_amount:,.2f}")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Portföy oluşturulurken hata: {str(e)}")
+            finally:
+                session.close()
 else:
     st.info("Portföy verisi bulunamadı.")
 
@@ -1392,6 +1437,7 @@ if user_stocks:
             cost_basis = stock.buy_price * stock.quantity if stock.buy_price else 0
             profit_loss = current_value - cost_basis if cost_basis > 0 else 0
             profit_loss_pct = ((current_price - stock.buy_price) / stock.buy_price * 100) if stock.buy_price else 0
+            daily_pnl = current_value * (daily_change / 100) if daily_change else 0
             total_value += current_value
             total_cost += cost_basis
             
@@ -1399,24 +1445,26 @@ if user_stocks:
                 "ID": stock.id,
                 "Sembol": stock.symbol,
                 "Sektör": stock.sector or "-",
-                "Adet": stock.quantity,
-                "Alış Fiyatı ($)": stock.buy_price or "-",
-                "Güncel Fiyat ($)": current_price,
-                "Günlük (%)": daily_change,
-                "Kar/Zarar ($)": round(profit_loss, 2),
-                "Kar/Zarar (%)": round(profit_loss_pct, 2)
+                "Adet": round(stock.quantity, 4),
+                "Maliyet ($)": round(cost_basis, 2),
+                "Güncel Fiyat ($)": round(current_price, 2),
+                "Günlük (%)": round(daily_change, 2) if daily_change else 0,
+                "Günlük K/Z ($)": round(daily_pnl, 2),
+                "Toplam (%)": round(profit_loss_pct, 2),
+                "Toplam K/Z ($)": round(profit_loss, 2)
             })
         else:
             portfolio_data.append({
                 "ID": stock.id,
                 "Sembol": stock.symbol,
                 "Sektör": stock.sector or "-",
-                "Adet": stock.quantity,
-                "Alış Fiyatı ($)": stock.buy_price or "-",
+                "Adet": round(stock.quantity, 4),
+                "Maliyet ($)": "-",
                 "Güncel Fiyat ($)": "-",
                 "Günlük (%)": "-",
-                "Kar/Zarar ($)": "-",
-                "Kar/Zarar (%)": "-"
+                "Günlük K/Z ($)": "-",
+                "Toplam (%)": "-",
+                "Toplam K/Z ($)": "-"
             })
     
     user_df = pd.DataFrame(portfolio_data)
