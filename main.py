@@ -175,10 +175,9 @@ def get_sector_holdings_data(etf_symbol):
             company_name = info.get("shortName", symbol)
             
             forward_pe = info.get("forwardPE", 0) or 0
+            peg_ratio = info.get("pegRatio", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
             profit_margin = info.get("profitMargins", 0) or 0
-            rec_mean = info.get("recommendationMean", 3) or 3
-            revision_score = (5 - rec_mean) / 4 * 100
             
             if len(hist) >= 2:
                 current = hist['Close'].iloc[-1]
@@ -201,8 +200,7 @@ def get_sector_holdings_data(etf_symbol):
                     "_valuation": valuation_score,
                     "_growth": revenue_growth * 100,
                     "_profitability": profit_margin * 100,
-                    "_momentum": momentum,
-                    "_revision": revision_score
+                    "_momentum": momentum
                 })
         except:
             pass
@@ -214,16 +212,14 @@ def get_sector_holdings_data(etf_symbol):
     growths = normalize_score([d["_growth"] for d in raw_data])
     profits = normalize_score([d["_profitability"] for d in raw_data])
     momentums = normalize_score([d["_momentum"] for d in raw_data])
-    revisions = normalize_score([d["_revision"] for d in raw_data])
     
     final_data = []
     for i, d in enumerate(raw_data):
-        val_puan = round(valuations[i] * 0.20, 1)
-        buy_puan = round(growths[i] * 0.20, 1)
-        kar_puan = round(profits[i] * 0.20, 1)
-        mom_puan = round(momentums[i] * 0.20, 1)
-        rev_puan = round(revisions[i] * 0.20, 1)
-        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
+        val_puan = round(valuations[i] * 0.25, 1)
+        buy_puan = round(growths[i] * 0.25, 1)
+        kar_puan = round(profits[i] * 0.25, 1)
+        mom_puan = round(momentums[i] * 0.25, 1)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan, 1)
         
         final_data.append({
             "Sembol": d["Sembol"],
@@ -234,7 +230,6 @@ def get_sector_holdings_data(etf_symbol):
             "Büyüme": buy_puan,
             "Karlılık": kar_puan,
             "Momentum": mom_puan,
-            "Revizyon": rev_puan,
             "Toplam Puan": toplam
         })
     
@@ -320,24 +315,16 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
     sorted_data = sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
     return sorted_data[:count]
 
-PORTFOLIO_PERIODS = {
-    "5 Gün": ("7d", 5),
-    "15 Gün": ("20d", 15),
-    "1 Ay": ("35d", 22),
-    "6 Ay": ("200d", 126)
-}
-
 @st.cache_data(ttl=60)
-def get_all_sector_candidates(etf_symbol, sector_name, period_key="5 Gün"):
+def get_all_sector_candidates(etf_symbol, sector_name):
     """Bir sektördeki tüm adayları puanlarıyla döndürür"""
     holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
-    fetch_period, lookback_days = PORTFOLIO_PERIODS.get(period_key, ("7d", 5))
     raw_data = []
     
     for symbol in holdings:
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period=fetch_period)
+            hist = ticker.history(period="10d")
             info = ticker.info
             company_name = info.get("shortName", symbol)
             
@@ -352,11 +339,11 @@ def get_all_sector_candidates(etf_symbol, sector_name, period_key="5 Gün"):
                 previous = hist['Close'].iloc[-2]
                 daily_change = ((current - previous) / previous) * 100
                 
-                if len(hist) > lookback_days:
-                    period_start = hist['Close'].iloc[-(lookback_days + 1)]
+                if len(hist) >= 5:
+                    week_ago = hist['Close'].iloc[0]
+                    momentum = ((current - week_ago) / week_ago) * 100
                 else:
-                    period_start = hist['Close'].iloc[0]
-                momentum = ((current - period_start) / period_start) * 100
+                    momentum = daily_change
                 
                 valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
                 
@@ -398,21 +385,15 @@ def get_all_sector_candidates(etf_symbol, sector_name, period_key="5 Gün"):
             "Şirket": d["Şirket"],
             "Sektör": d["Sektör"],
             "Fiyat ($)": d["Fiyat ($)"],
-            "Değişim (%)": d["Günlük Değişim (%)"],
-            "Değerleme": val_puan,
-            "Büyüme": buy_puan,
-            "Karlılık": kar_puan,
-            "Momentum": mom_puan,
-            "Revizyon": rev_puan,
+            "Günlük Değişim (%)": d["Günlük Değişim (%)"],
             "Toplam Puan": toplam
         })
     
     return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
 
 @st.cache_data(ttl=60)
-def get_portfolio_data(period_key="5 Gün"):
-    sector_period_map = {"5 Gün": "5 Gün", "15 Gün": "15 Gün", "1 Ay": "1 Ay", "6 Ay": "6 Ay"}
-    sector_df = get_sector_data(sector_period_map.get(period_key, "5 Gün"))
+def get_portfolio_data():
+    sector_df = get_sector_data("1 Gün")
     sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
     
     top_6_sectors = sector_df.head(6)
@@ -425,7 +406,7 @@ def get_portfolio_data(period_key="5 Gün"):
         etf_symbol = SECTOR_ETFS.get(sector_name, "")
         rank = list(top_6_sectors.index).index(idx) + 1
         
-        candidates = get_all_sector_candidates(etf_symbol, sector_name, period_key)
+        candidates = get_all_sector_candidates(etf_symbol, sector_name)
         sector_candidates[sector_name] = candidates
         sector_quotas[sector_name] = 2 if rank <= 4 else 1
     
@@ -685,30 +666,19 @@ if selected_sector:
 st.divider()
 
 st.header("🎯 Sistemin Sizin İçin Seçtikleri")
-
-portfolio_period_col1, portfolio_period_col2 = st.columns([3, 1])
-with portfolio_period_col1:
-    st.success("**En iyi 10 hisse önerisi**")
-with portfolio_period_col2:
-    portfolio_period = st.selectbox(
-        "Periyot",
-        options=list(PORTFOLIO_PERIODS.keys()),
-        index=0,
-        key="portfolio_period_select",
-        label_visibility="collapsed"
-    )
+st.success("**En iyi 10 hisse önerisi**")
 
 with st.spinner("Hisse verileri yükleniyor..."):
-    portfolio = get_portfolio_data(portfolio_period)
+    portfolio = get_portfolio_data()
 
 if not portfolio.empty:
-    def color_portfolio_change(val):
+    def color_portfolio(val):
         if isinstance(val, (int, float)):
             color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
             return f'color: {color}'
         return ''
     
-    styled_portfolio = portfolio.style.map(color_portfolio_change, subset=['Değişim (%)'])
+    styled_portfolio = portfolio.style.map(color_portfolio, subset=['Günlük Değişim (%)'])
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
 else:
     st.info("Portföy verisi bulunamadı.")
