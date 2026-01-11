@@ -445,33 +445,26 @@ if event and event.selection and len(event.selection.points) > 0:
         if clicked_sector in SECTOR_ETFS:
             st.session_state.selected_sector_name = clicked_sector
 
-col_left, col_right = st.columns([1, 2])
+st.subheader("🔍 Sektör Detayı")
+selected_sector = st.session_state.selected_sector_name
+st.success(f"**Seçili Sektör:** {selected_sector}")
 
-with col_left:
-    st.subheader(f"📊 Sektörel Para Akışı ({selected_period})")
-    st.dataframe(sorted_sector_data, hide_index=True, use_container_width=True)
-
-with col_right:
-    st.subheader("🔍 Sektör Detayı")
-    selected_sector = st.session_state.selected_sector_name
-    st.success(f"**Seçili Sektör:** {selected_sector}")
+if selected_sector:
+    etf_symbol = SECTOR_ETFS[selected_sector]
+    with st.spinner(f"{selected_sector} şirketleri yükleniyor..."):
+        holdings_data = get_sector_holdings_data(etf_symbol)
     
-    if selected_sector:
-        etf_symbol = SECTOR_ETFS[selected_sector]
-        with st.spinner(f"{selected_sector} şirketleri yükleniyor..."):
-            holdings_data = get_sector_holdings_data(etf_symbol)
+    if not holdings_data.empty:
+        def color_holdings(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+                return f'color: {color}'
+            return ''
         
-        if not holdings_data.empty:
-            def color_holdings(val):
-                if isinstance(val, (int, float)):
-                    color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
-                    return f'color: {color}'
-                return ''
-            
-            styled_holdings = holdings_data.style.map(color_holdings, subset=['Değişim (%)'])
-            st.dataframe(styled_holdings, hide_index=True, use_container_width=True)
-        else:
-            st.info("Bu sektör için şirket verisi bulunamadı.")
+        styled_holdings = holdings_data.style.map(color_holdings, subset=['Değişim (%)'])
+        st.dataframe(styled_holdings, hide_index=True, use_container_width=True)
+    else:
+        st.info("Bu sektör için şirket verisi bulunamadı.")
 
 st.divider()
 
