@@ -10,5 +10,6 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "streamlit>=1.52.2",
     "streamlit-autorefresh>=1.0.1",
+    "streamlit-plotly-events>=0.0.6",
     "yfinance>=1.0",
 ]
