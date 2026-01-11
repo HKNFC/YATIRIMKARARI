@@ -175,9 +175,10 @@ def get_sector_holdings_data(etf_symbol):
             company_name = info.get("shortName", symbol)
             
             forward_pe = info.get("forwardPE", 0) or 0
-            peg_ratio = info.get("pegRatio", 0) or 0
             revenue_growth = info.get("revenueGrowth", 0) or 0
             profit_margin = info.get("profitMargins", 0) or 0
+            rec_mean = info.get("recommendationMean", 3) or 3
+            revision_score = (5 - rec_mean) / 4 * 100
             
             if len(hist) >= 2:
                 current = hist['Close'].iloc[-1]
@@ -200,7 +201,8 @@ def get_sector_holdings_data(etf_symbol):
                     "_valuation": valuation_score,
                     "_growth": revenue_growth * 100,
                     "_profitability": profit_margin * 100,
-                    "_momentum": momentum
+                    "_momentum": momentum,
+                    "_revision": revision_score
                 })
         except:
             pass
@@ -212,14 +214,16 @@ def get_sector_holdings_data(etf_symbol):
     growths = normalize_score([d["_growth"] for d in raw_data])
     profits = normalize_score([d["_profitability"] for d in raw_data])
     momentums = normalize_score([d["_momentum"] for d in raw_data])
+    revisions = normalize_score([d["_revision"] for d in raw_data])
     
     final_data = []
     for i, d in enumerate(raw_data):
-        val_puan = round(valuations[i] * 0.25, 1)
-        buy_puan = round(growths[i] * 0.25, 1)
-        kar_puan = round(profits[i] * 0.25, 1)
-        mom_puan = round(momentums[i] * 0.25, 1)
-        toplam = round(val_puan + buy_puan + kar_puan + mom_puan, 1)
+        val_puan = round(valuations[i] * 0.20, 1)
+        buy_puan = round(growths[i] * 0.20, 1)
+        kar_puan = round(profits[i] * 0.20, 1)
+        mom_puan = round(momentums[i] * 0.20, 1)
+        rev_puan = round(revisions[i] * 0.20, 1)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
         
         final_data.append({
             "Sembol": d["Sembol"],
@@ -230,6 +234,7 @@ def get_sector_holdings_data(etf_symbol):
             "Büyüme": buy_puan,
             "Karlılık": kar_puan,
             "Momentum": mom_puan,
+            "Revizyon": rev_puan,
             "Toplam Puan": toplam
         })
     
