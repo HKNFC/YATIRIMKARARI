@@ -1055,7 +1055,9 @@ if selected_sector:
                 return f'color: {color}'
             return ''
         
-        styled_holdings = holdings_data.style.map(color_holdings, subset=['Değişim (%)'])
+        numeric_cols = holdings_data.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+        format_dict = {col: "{:.2f}" for col in numeric_cols}
+        styled_holdings = holdings_data.style.format(format_dict).map(color_holdings, subset=['Değişim (%)'])
         st.dataframe(styled_holdings, hide_index=True, use_container_width=True)
     else:
         st.info("Bu sektör için şirket verisi bulunamadı.")
@@ -1075,7 +1077,9 @@ if not portfolio.empty:
             return f'color: {color}'
         return ''
     
-    styled_portfolio = portfolio.style.map(color_portfolio, subset=['Günlük Değişim (%)'])
+    numeric_cols = portfolio.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+    format_dict = {col: "{:.2f}" for col in numeric_cols}
+    styled_portfolio = portfolio.style.format(format_dict).map(color_portfolio, subset=['Günlük Değişim (%)'])
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
 else:
     st.info("Portföy verisi bulunamadı.")
@@ -1171,7 +1175,10 @@ if run_backtest:
         st.plotly_chart(fig_backtest, use_container_width=True)
         
         st.subheader("Dönemsel Detaylar")
-        st.dataframe(backtest_results, hide_index=True, use_container_width=True)
+        numeric_cols = backtest_results.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+        format_dict = {col: "{:.2f}" for col in numeric_cols}
+        styled_backtest = backtest_results.style.format(format_dict)
+        st.dataframe(styled_backtest, hide_index=True, use_container_width=True)
     else:
         st.warning("Simülasyon sonuçları oluşturulamadı. Lütfen farklı bir tarih aralığı seçin.")
 
@@ -1228,7 +1235,11 @@ if user_stocks:
     total_profit = total_value - total_cost
     col_summary3.metric("Toplam Kar/Zarar", f"${total_profit:,.2f}", delta=f"{(total_profit/total_cost*100) if total_cost > 0 else 0:.2f}%")
     
-    st.dataframe(user_df.drop(columns=['ID']), hide_index=True, use_container_width=True)
+    display_df = user_df.drop(columns=['ID'])
+    numeric_cols = display_df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+    format_dict = {col: "{:.2f}" for col in numeric_cols}
+    styled_user_df = display_df.style.format(format_dict, na_rep="-")
+    st.dataframe(styled_user_df, hide_index=True, use_container_width=True)
     
     st.subheader("Hisse Sil")
     col_del1, col_del2 = st.columns([3, 1])
