@@ -316,31 +316,144 @@ def get_top_stocks_from_sector(etf_symbol, sector_name, count=2):
     return sorted_data[:count]
 
 @st.cache_data(ttl=60)
+def get_all_sector_candidates(etf_symbol, sector_name):
+    """Bir sektördeki tüm adayları puanlarıyla döndürür"""
+    holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+    raw_data = []
+    
+    for symbol in holdings:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="10d")
+            info = ticker.info
+            company_name = info.get("shortName", symbol)
+            
+            forward_pe = info.get("forwardPE", 0) or 0
+            revenue_growth = info.get("revenueGrowth", 0) or 0
+            profit_margin = info.get("profitMargins", 0) or 0
+            rec_mean = info.get("recommendationMean", 3) or 3
+            revision_score = (5 - rec_mean) / 4 * 100
+            
+            if len(hist) >= 2:
+                current = hist['Close'].iloc[-1]
+                previous = hist['Close'].iloc[-2]
+                daily_change = ((current - previous) / previous) * 100
+                
+                if len(hist) >= 5:
+                    week_ago = hist['Close'].iloc[0]
+                    momentum = ((current - week_ago) / week_ago) * 100
+                else:
+                    momentum = daily_change
+                
+                valuation_score = 100 - min(forward_pe, 100) if forward_pe > 0 else 50
+                
+                raw_data.append({
+                    "Sembol": symbol,
+                    "Şirket": company_name[:20],
+                    "Sektör": sector_name,
+                    "Fiyat ($)": round(current, 2),
+                    "Günlük Değişim (%)": round(daily_change, 2),
+                    "_valuation": valuation_score,
+                    "_growth": revenue_growth * 100,
+                    "_profitability": profit_margin * 100,
+                    "_momentum": momentum,
+                    "_revision": revision_score
+                })
+        except:
+            pass
+    
+    if not raw_data:
+        return []
+    
+    valuations = normalize_score([d["_valuation"] for d in raw_data])
+    growths = normalize_score([d["_growth"] for d in raw_data])
+    profits = normalize_score([d["_profitability"] for d in raw_data])
+    momentums = normalize_score([d["_momentum"] for d in raw_data])
+    revisions = normalize_score([d["_revision"] for d in raw_data])
+    
+    final_data = []
+    for i, d in enumerate(raw_data):
+        val_puan = round(valuations[i] * 0.20, 1)
+        buy_puan = round(growths[i] * 0.20, 1)
+        kar_puan = round(profits[i] * 0.20, 1)
+        mom_puan = round(momentums[i] * 0.20, 1)
+        rev_puan = round(revisions[i] * 0.20, 1)
+        toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 1)
+        
+        final_data.append({
+            "Sembol": d["Sembol"],
+            "Şirket": d["Şirket"],
+            "Sektör": d["Sektör"],
+            "Fiyat ($)": d["Fiyat ($)"],
+            "Günlük Değişim (%)": d["Günlük Değişim (%)"],
+            "Toplam Puan": toplam
+        })
+    
+    return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
+
+@st.cache_data(ttl=60)
 def get_portfolio_data():
     sector_df = get_sector_data("1 Gün")
     sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
     
     top_6_sectors = sector_df.head(6)
     
-    all_picks = []
+    sector_candidates = {}
+    sector_quotas = {}
     
     for idx, row in top_6_sectors.iterrows():
         sector_name = row["Sektör"]
         etf_symbol = SECTOR_ETFS.get(sector_name, "")
-        
         rank = list(top_6_sectors.index).index(idx) + 1
         
-        if rank <= 4:
-            picks = get_top_stocks_from_sector(etf_symbol, sector_name, count=2)
-        else:
-            picks = get_top_stocks_from_sector(etf_symbol, sector_name, count=1)
-        
-        all_picks.extend(picks)
+        candidates = get_all_sector_candidates(etf_symbol, sector_name)
+        sector_candidates[sector_name] = candidates
+        sector_quotas[sector_name] = 2 if rank <= 4 else 1
     
-    if not all_picks:
+    symbol_best_sector = {}
+    for sector_name, candidates in sector_candidates.items():
+        for candidate in candidates:
+            symbol = candidate["Sembol"]
+            score = candidate["Toplam Puan"]
+            if symbol not in symbol_best_sector or score > symbol_best_sector[symbol]["score"]:
+                symbol_best_sector[symbol] = {"sector": sector_name, "score": score}
+    
+    final_picks = []
+    used_symbols = set()
+    
+    for sector_name in sector_quotas.keys():
+        quota = sector_quotas[sector_name]
+        candidates = sector_candidates[sector_name]
+        selected = 0
+        
+        for candidate in candidates:
+            if selected >= quota:
+                break
+            symbol = candidate["Sembol"]
+            
+            if symbol in used_symbols:
+                continue
+            
+            if symbol_best_sector[symbol]["sector"] == sector_name:
+                final_picks.append(candidate)
+                used_symbols.add(symbol)
+                selected += 1
+            else:
+                continue
+        
+        for candidate in candidates:
+            if selected >= quota:
+                break
+            symbol = candidate["Sembol"]
+            if symbol not in used_symbols:
+                final_picks.append(candidate)
+                used_symbols.add(symbol)
+                selected += 1
+    
+    if not final_picks:
         return pd.DataFrame()
     
-    return pd.DataFrame(all_picks)
+    return pd.DataFrame(final_picks)
 
 def get_user_portfolio():
     session = get_session()
