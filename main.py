@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
 from streamlit_autorefresh import st_autorefresh
@@ -455,6 +455,139 @@ def get_portfolio_data(period_key="1 Gün"):
     
     return pd.DataFrame(final_picks)
 
+BACKTEST_INTERVALS = {
+    "Haftalık": 7,
+    "2 Haftalık": 14,
+    "Aylık": 30,
+    "2 Aylık": 60,
+    "3 Aylık": 90
+}
+
+def get_historical_sector_performance(etf_symbol, start_date, end_date):
+    """Belirli tarih aralığında sektör performansını hesaplar (bir gün önceki veri)"""
+    try:
+        ticker = yf.Ticker(etf_symbol)
+        adj_end = end_date - timedelta(days=1)
+        hist = ticker.history(start=start_date, end=adj_end)
+        if len(hist) >= 2:
+            start_price = hist['Close'].iloc[0]
+            end_price = hist['Close'].iloc[-1]
+            return ((end_price - start_price) / start_price) * 100
+        return 0
+    except:
+        return 0
+
+def get_historical_stock_return(symbol, start_date, end_date):
+    """Belirli tarih aralığında hisse getirisini hesaplar"""
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(start=start_date, end=end_date)
+        if len(hist) >= 2:
+            start_price = hist['Close'].iloc[0]
+            end_price = hist['Close'].iloc[-1]
+            return ((end_price - start_price) / start_price) * 100
+        return None
+    except:
+        return None
+
+PERIOD_LOOKBACK_DAYS = {
+    "1 Gün": 1,
+    "5 Gün": 5,
+    "15 Gün": 15,
+    "1 Ay": 30,
+    "3 Ay": 90,
+    "6 Ay": 180,
+    "1 Yıl": 365
+}
+
+def get_historical_momentum_score(symbol, ref_date):
+    """Belirli bir tarihteki hisse momentum skorunu hesaplar (bir gün önceki veri)"""
+    try:
+        ticker = yf.Ticker(symbol)
+        start = ref_date - timedelta(days=35)
+        adj_end = ref_date - timedelta(days=1)
+        hist = ticker.history(start=start, end=adj_end)
+        
+        if len(hist) >= 5:
+            current = hist['Close'].iloc[-1]
+            week_ago = hist['Close'].iloc[-5] if len(hist) >= 5 else hist['Close'].iloc[0]
+            month_ago = hist['Close'].iloc[0]
+            
+            weekly_momentum = ((current - week_ago) / week_ago) * 100
+            monthly_momentum = ((current - month_ago) / month_ago) * 100
+            
+            return (weekly_momentum * 0.6 + monthly_momentum * 0.4)
+        return None
+    except:
+        return None
+
+def run_backtest_simulation(start_date, interval_days, period_key):
+    """Backtesting simülasyonu - momentum bazlı (tarihsel veri sınırlaması nedeniyle)"""
+    results = []
+    portfolio_value = 100.0
+    current_date = start_date
+    today = datetime.now().date()
+    
+    lookback_days = PERIOD_LOOKBACK_DAYS.get(period_key, 30)
+    
+    while current_date < today:
+        next_date = current_date + timedelta(days=interval_days)
+        if next_date > today:
+            next_date = today
+        
+        sector_performances = []
+        for name, symbol in SECTOR_ETFS.items():
+            lookback_start = current_date - timedelta(days=lookback_days)
+            perf = get_historical_sector_performance(symbol, lookback_start, current_date)
+            sector_performances.append({"Sektör": name, "Performans": perf, "ETF": symbol})
+        
+        sector_df = pd.DataFrame(sector_performances)
+        sector_df = sector_df.sort_values(by="Performans", ascending=False)
+        top_6 = sector_df.head(6)
+        
+        all_candidates = []
+        used_symbols = set()
+        
+        for idx, (_, row) in enumerate(top_6.iterrows()):
+            etf_symbol = row["ETF"]
+            holdings = SECTOR_HOLDINGS.get(etf_symbol, [])
+            quota = 2 if idx < 4 else 1
+            
+            sector_stocks = []
+            for symbol in holdings:
+                if symbol in used_symbols:
+                    continue
+                score = get_historical_momentum_score(symbol, current_date)
+                if score is not None:
+                    sector_stocks.append({"symbol": symbol, "score": score})
+            
+            sector_stocks.sort(key=lambda x: x["score"], reverse=True)
+            
+            for stock in sector_stocks[:quota]:
+                all_candidates.append(stock["symbol"])
+                used_symbols.add(stock["symbol"])
+        
+        if all_candidates:
+            returns = []
+            for symbol in all_candidates:
+                ret = get_historical_stock_return(symbol, current_date, next_date)
+                if ret is not None:
+                    returns.append(ret)
+            
+            if returns:
+                avg_return = sum(returns) / len(returns)
+                portfolio_value = portfolio_value * (1 + avg_return / 100)
+        
+        results.append({
+            "Tarih": current_date,
+            "Portföy Değeri": round(portfolio_value, 2),
+            "Seçilen Hisse": len(all_candidates)
+        })
+        
+        current_date = next_date
+    
+    return pd.DataFrame(results)
+
 def get_user_portfolio():
     session = get_session()
     try:
@@ -682,6 +815,82 @@ if not portfolio.empty:
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
 else:
     st.info("Portföy verisi bulunamadı.")
+
+st.divider()
+
+st.header("📈 Momentum Strateji Testi")
+st.warning("""**Bu Nedir?**
+Sektör performansı + fiyat momentumu bazlı alternatif bir strateji testidir.
+
+**Neden Farklı?** Tarihsel P/E, gelir büyümesi ve analist revizyonları verileri mevcut değildir. Bu nedenle canlı sistemin 5 kriterli puanlaması geçmişe uygulanamaz.
+
+**Sonuçlar:** Sadece momentum stratejisinin performansını gösterir, canlı önerilerle karşılaştırılamaz.""")
+
+col_bt1, col_bt2, col_bt3 = st.columns(3)
+
+with col_bt1:
+    min_date = datetime.now().date() - timedelta(days=365*2)
+    max_date = datetime.now().date() - timedelta(days=30)
+    backtest_start = st.date_input(
+        "Başlangıç Tarihi",
+        value=datetime.now().date() - timedelta(days=180),
+        min_value=min_date,
+        max_value=max_date
+    )
+
+with col_bt2:
+    backtest_interval = st.selectbox(
+        "Portföy Yenileme Aralığı",
+        options=list(BACKTEST_INTERVALS.keys()),
+        index=2
+    )
+
+with col_bt3:
+    st.write("")
+    st.write("")
+    run_backtest = st.button("🚀 Simülasyonu Başlat", type="primary")
+
+if run_backtest:
+    interval_days = BACKTEST_INTERVALS[backtest_interval]
+    
+    with st.spinner("Simülasyon çalışıyor... Bu işlem biraz zaman alabilir."):
+        backtest_results = run_backtest_simulation(backtest_start, interval_days, selected_period)
+    
+    if not backtest_results.empty:
+        final_value = backtest_results["Portföy Değeri"].iloc[-1]
+        total_return = ((final_value - 100) / 100) * 100
+        
+        col_res1, col_res2, col_res3 = st.columns(3)
+        col_res1.metric("Başlangıç Değeri", "$100.00")
+        col_res2.metric("Son Değer", f"${final_value:.2f}")
+        col_res3.metric("Toplam Getiri", f"%{total_return:.2f}", delta=f"{total_return:.2f}%")
+        
+        fig_backtest = go.Figure()
+        fig_backtest.add_trace(go.Scatter(
+            x=backtest_results["Tarih"],
+            y=backtest_results["Portföy Değeri"],
+            mode='lines+markers',
+            name='Portföy Değeri',
+            line=dict(color='#00D4AA', width=2),
+            marker=dict(size=6)
+        ))
+        
+        fig_backtest.add_hline(y=100, line_dash="dash", line_color="gray", annotation_text="Başlangıç: $100")
+        
+        fig_backtest.update_layout(
+            title=f"Portföy Performansı ({backtest_start} - Bugün)",
+            xaxis_title="Tarih",
+            yaxis_title="Portföy Değeri ($)",
+            template="plotly_dark",
+            height=400
+        )
+        
+        st.plotly_chart(fig_backtest, use_container_width=True)
+        
+        st.subheader("Dönemsel Detaylar")
+        st.dataframe(backtest_results, hide_index=True, use_container_width=True)
+    else:
+        st.warning("Simülasyon sonuçları oluşturulamadı. Lütfen farklı bir tarih aralığı seçin.")
 
 st.divider()
 
