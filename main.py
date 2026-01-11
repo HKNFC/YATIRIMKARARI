@@ -468,19 +468,23 @@ if selected_sector:
 
 st.divider()
 
-st.header("🎯 Portföy Seçkisi (Model 10)")
+st.header("🎯 Sistemin Sizin İçin Seçtikleri")
+st.success("**En iyi 10 hisse önerisi**")
 
 with st.spinner("Hisse verileri yükleniyor..."):
     portfolio = get_portfolio_data()
 
-def color_change(val):
-    if isinstance(val, str):
+if not portfolio.empty:
+    def color_portfolio(val):
+        if isinstance(val, (int, float)):
+            color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+            return f'color: {color}'
         return ''
-    color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
-    return f'color: {color}'
-
-styled_portfolio = portfolio.style.map(color_change, subset=['Günlük Değişim (%)'])
-st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
+    
+    styled_portfolio = portfolio.style.map(color_portfolio, subset=['Günlük Değişim (%)'])
+    st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
+else:
+    st.info("Portföy verisi bulunamadı.")
 
 st.divider()
 
