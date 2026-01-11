@@ -31,6 +31,7 @@ class UserPortfolio(Base):
     quantity = Column(Float, default=1)
     buy_price = Column(Float)
     added_at = Column(DateTime, default=datetime.now)
+    portfolio_name = Column(String(100), default='Portföy 1')
 
 class PriceAlert(Base):
     __tablename__ = 'price_alerts'
@@ -1275,13 +1276,29 @@ if not portfolio.empty:
     st.dataframe(styled_portfolio, hide_index=True, use_container_width=True)
     
     st.subheader("💼 Portföyüm Olarak Kaydet")
+    
+    session = get_session()
+    existing_portfolios = session.query(UserPortfolio.portfolio_name).distinct().all()
+    existing_names = [p[0] for p in existing_portfolios if p[0]]
+    session.close()
+    next_portfolio_num = len(existing_names) + 1
+    default_name = f"Portföy {next_portfolio_num}"
+    
     with st.form("save_system_portfolio_form"):
-        investment_input = st.text_input(
-            "Toplam Yatırım Miktarı (USD)",
-            value="10.000",
-            help="Bu tutarı sistemin seçtiği hisselere eşit olarak dağıtacağız (örn: 10.000, 25.000, 100.000)"
-        )
-        save_portfolio_btn = st.form_submit_button("💾 Portföyümü Oluştur", type="primary")
+        col_pf1, col_pf2 = st.columns(2)
+        with col_pf1:
+            portfolio_name_input = st.text_input(
+                "Portföy Adı",
+                value=default_name,
+                help="Bu portföye bir isim verin (örn: Portföy 1, Agresif, Temkinli)"
+            )
+        with col_pf2:
+            investment_input = st.text_input(
+                "Toplam Yatırım (USD)",
+                value="10.000",
+                help="Binlik ayırıcı olarak nokta kullanın (örn: 10.000)"
+            )
+        save_portfolio_btn = st.form_submit_button("💾 Yeni Portföy Oluştur", type="primary")
         
         if save_portfolio_btn:
             try:
@@ -1292,6 +1309,11 @@ if not portfolio.empty:
             except ValueError:
                 st.error("Geçerli bir tutar girin (örn: 10.000)")
                 st.stop()
+            
+            if not portfolio_name_input.strip():
+                st.error("Portföy adı boş olamaz.")
+                st.stop()
+                
             session = get_session()
             try:
                 stock_count = len(portfolio)
@@ -1308,12 +1330,13 @@ if not portfolio.empty:
                         symbol=symbol,
                         sector=sector,
                         quantity=quantity,
-                        buy_price=current_price
+                        buy_price=current_price,
+                        portfolio_name=portfolio_name_input.strip()
                     )
                     session.add(new_holding)
                 
                 session.commit()
-                st.success(f"✅ {stock_count} hisse ile portföyünüz oluşturuldu! Toplam yatırım: ${investment_amount:,.2f}")
+                st.success(f"✅ '{portfolio_name_input}' adlı portföy {stock_count} hisse ile oluşturuldu! Toplam: ${investment_amount:,}")
                 st.rerun()
             except Exception as e:
                 session.rollback()
@@ -1423,83 +1446,119 @@ if run_backtest:
 
 st.divider()
 
-st.header("💼 Benim Portföyüm")
+st.header("💼 Benim Portföylerim")
 
-user_stocks = get_user_portfolio()
+session = get_session()
+all_portfolio_names = session.query(UserPortfolio.portfolio_name).distinct().all()
+portfolio_names = [p[0] for p in all_portfolio_names if p[0]]
+session.close()
 
-if user_stocks:
-    portfolio_data = []
-    total_value = 0
-    total_cost = 0
+if portfolio_names:
+    selected_portfolio_name = st.selectbox(
+        "📂 Portföy Seçin",
+        options=portfolio_names,
+        index=0
+    )
     
-    for stock in user_stocks:
-        current_price, daily_change = get_stock_price(stock.symbol)
-        if current_price:
-            current_value = current_price * stock.quantity
-            cost_basis = stock.buy_price * stock.quantity if stock.buy_price else 0
-            profit_loss = current_value - cost_basis if cost_basis > 0 else 0
-            profit_loss_pct = ((current_price - stock.buy_price) / stock.buy_price * 100) if stock.buy_price else 0
-            daily_pnl = current_value * (daily_change / 100) if daily_change else 0
-            total_value += current_value
-            total_cost += cost_basis
-            
-            portfolio_data.append({
-                "ID": stock.id,
-                "Sembol": stock.symbol,
-                "Sektör": stock.sector or "-",
-                "Adet": round(stock.quantity, 4),
-                "Maliyet ($)": round(cost_basis, 2),
-                "Güncel Fiyat ($)": round(current_price, 2),
-                "Günlük (%)": round(daily_change, 2) if daily_change else 0,
-                "Günlük K/Z ($)": round(daily_pnl, 2),
-                "Toplam (%)": round(profit_loss_pct, 2),
-                "Toplam K/Z ($)": round(profit_loss, 2)
-            })
-        else:
-            portfolio_data.append({
-                "ID": stock.id,
-                "Sembol": stock.symbol,
-                "Sektör": stock.sector or "-",
-                "Adet": round(stock.quantity, 4),
-                "Maliyet ($)": "-",
-                "Güncel Fiyat ($)": "-",
-                "Günlük (%)": "-",
-                "Günlük K/Z ($)": "-",
-                "Toplam (%)": "-",
-                "Toplam K/Z ($)": "-"
-            })
+    session = get_session()
+    user_stocks = session.query(UserPortfolio).filter(UserPortfolio.portfolio_name == selected_portfolio_name).all()
+    session.close()
     
-    user_df = pd.DataFrame(portfolio_data)
-    
-    col_summary1, col_summary2, col_summary3 = st.columns(3)
-    col_summary1.metric("Toplam Değer", f"${total_value:,.2f}")
-    col_summary2.metric("Toplam Maliyet", f"${total_cost:,.2f}")
-    total_profit = total_value - total_cost
-    col_summary3.metric("Toplam Kar/Zarar", f"${total_profit:,.2f}", delta=f"{(total_profit/total_cost*100) if total_cost > 0 else 0:.2f}%")
-    
-    display_df = user_df.drop(columns=['ID'])
-    numeric_cols = display_df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
-    format_dict = {col: "{:.2f}" for col in numeric_cols}
-    styled_user_df = display_df.style.format(format_dict, na_rep="-")
-    st.dataframe(styled_user_df, hide_index=True, use_container_width=True)
-    
-    st.subheader("Hisse Sil")
-    col_del1, col_del2 = st.columns([3, 1])
-    with col_del1:
-        stock_to_delete = st.selectbox(
-            "Silinecek hisse seçin",
-            options=[(s.id, f"{s.symbol} - {s.quantity} adet") for s in user_stocks],
-            format_func=lambda x: x[1]
-        )
-    with col_del2:
-        if st.button("🗑️ Sil", type="secondary"):
-            if stock_to_delete:
-                if remove_stock_from_portfolio(stock_to_delete[0]):
-                    st.success(f"{stock_to_delete[1]} silindi!")
+    if user_stocks:
+        portfolio_data = []
+        total_value = 0
+        total_cost = 0
+        
+        for stock in user_stocks:
+            current_price, daily_change = get_stock_price(stock.symbol)
+            if current_price:
+                current_value = current_price * stock.quantity
+                cost_basis = stock.buy_price * stock.quantity if stock.buy_price else 0
+                profit_loss = current_value - cost_basis if cost_basis > 0 else 0
+                profit_loss_pct = ((current_price - stock.buy_price) / stock.buy_price * 100) if stock.buy_price else 0
+                daily_pnl = current_value * (daily_change / 100) if daily_change else 0
+                total_value += current_value
+                total_cost += cost_basis
+                
+                portfolio_data.append({
+                    "ID": stock.id,
+                    "Sembol": stock.symbol,
+                    "Sektör": stock.sector or "-",
+                    "Adet": round(stock.quantity, 4),
+                    "Maliyet ($)": round(cost_basis, 2),
+                    "Güncel Fiyat ($)": round(current_price, 2),
+                    "Günlük (%)": round(daily_change, 2) if daily_change else 0,
+                    "Günlük K/Z ($)": round(daily_pnl, 2),
+                    "Toplam (%)": round(profit_loss_pct, 2),
+                    "Toplam K/Z ($)": round(profit_loss, 2)
+                })
+            else:
+                portfolio_data.append({
+                    "ID": stock.id,
+                    "Sembol": stock.symbol,
+                    "Sektör": stock.sector or "-",
+                    "Adet": round(stock.quantity, 4),
+                    "Maliyet ($)": "-",
+                    "Güncel Fiyat ($)": "-",
+                    "Günlük (%)": "-",
+                    "Günlük K/Z ($)": "-",
+                    "Toplam (%)": "-",
+                    "Toplam K/Z ($)": "-"
+                })
+        
+        user_df = pd.DataFrame(portfolio_data)
+        
+        col_summary1, col_summary2, col_summary3 = st.columns(3)
+        col_summary1.metric("Toplam Değer", f"${total_value:,.2f}")
+        col_summary2.metric("Toplam Maliyet", f"${total_cost:,.2f}")
+        total_profit = total_value - total_cost
+        col_summary3.metric("Toplam Kar/Zarar", f"${total_profit:,.2f}", delta=f"{(total_profit/total_cost*100) if total_cost > 0 else 0:.2f}%")
+        
+        display_df = user_df.drop(columns=['ID'])
+        numeric_cols = display_df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+        format_dict = {col: "{:.2f}" for col in numeric_cols}
+        styled_user_df = display_df.style.format(format_dict, na_rep="-")
+        st.dataframe(styled_user_df, hide_index=True, use_container_width=True)
+        
+        col_action1, col_action2 = st.columns(2)
+        
+        with col_action1:
+            st.subheader("Hisse Sil")
+            col_del1, col_del2 = st.columns([3, 1])
+            with col_del1:
+                stock_to_delete = st.selectbox(
+                    "Silinecek hisse seçin",
+                    options=[(s.id, f"{s.symbol} - {s.quantity:.4f} adet") for s in user_stocks],
+                    format_func=lambda x: x[1]
+                )
+            with col_del2:
+                st.write("")
+                if st.button("🗑️ Sil", type="secondary"):
+                    if stock_to_delete:
+                        if remove_stock_from_portfolio(stock_to_delete[0]):
+                            st.success(f"Hisse silindi!")
+                            st.cache_data.clear()
+                            st.rerun()
+        
+        with col_action2:
+            st.subheader("Portföyü Sil")
+            if st.button(f"🗑️ '{selected_portfolio_name}' Portföyünü Tamamen Sil", type="secondary"):
+                session = get_session()
+                try:
+                    session.query(UserPortfolio).filter(UserPortfolio.portfolio_name == selected_portfolio_name).delete()
+                    session.commit()
+                    st.success(f"'{selected_portfolio_name}' portföyü silindi!")
                     st.cache_data.clear()
                     st.rerun()
+                except Exception as e:
+                    session.rollback()
+                    st.error(f"Hata: {str(e)}")
+                finally:
+                    session.close()
 else:
-    st.info("Henüz portföyünüze hisse eklemediniz. Aşağıdan ekleyebilirsiniz.")
+    user_stocks = get_user_portfolio()
+    if not user_stocks:
+        st.info("Henüz portföyünüze hisse eklemediniz. Yukarıdan 'Portföyüm Olarak Kaydet' ile oluşturabilirsiniz.")
 
 st.subheader("Yeni Hisse Ekle")
 
