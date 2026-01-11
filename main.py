@@ -95,21 +95,21 @@ SECTOR_ETFS = {
 }
 
 SECTOR_HOLDINGS = {
-    "BOTZ": ["NVDA", "ISRG", "INTC", "ABBV", "TER"],
-    "HACK": ["CRWD", "PANW", "FTNT", "ZS", "OKTA"],
-    "ICLN": ["ENPH", "FSLR", "SEDG", "RUN", "PLUG"],
-    "FINX": ["SQ", "PYPL", "INTU", "FIS", "FISV"],
-    "XBI": ["MRNA", "VRTX", "REGN", "BIIB", "GILD"],
-    "XLK": ["AAPL", "MSFT", "NVDA", "AVGO", "CRM"],
-    "XLV": ["UNH", "JNJ", "LLY", "PFE", "ABBV"],
-    "XLF": ["BRK-B", "JPM", "V", "MA", "BAC"],
-    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG"],
-    "XLY": ["AMZN", "TSLA", "HD", "MCD", "NKE"],
-    "XLI": ["CAT", "UNP", "HON", "BA", "GE"],
-    "XLB": ["LIN", "APD", "SHW", "ECL", "DD"],
-    "XLRE": ["PLD", "AMT", "EQIX", "CCI", "SPG"],
-    "XLC": ["META", "GOOGL", "NFLX", "DIS", "T"],
-    "SMH": ["NVDA", "TSM", "AVGO", "ASML", "AMD"]
+    "BOTZ": ["NVDA", "ISRG", "INTC", "TER", "FANUC", "KUKA", "IRBT", "PATH", "CGNX", "ALGN"],
+    "HACK": ["CRWD", "PANW", "FTNT", "ZS", "OKTA", "CYBR", "S", "NET", "TENB", "RPD"],
+    "ICLN": ["ENPH", "FSLR", "SEDG", "RUN", "PLUG", "NEE", "BE", "CSIQ", "JKS", "NOVA"],
+    "FINX": ["SQ", "PYPL", "INTU", "FIS", "FISV", "COIN", "HOOD", "SOFI", "AFRM", "UPST"],
+    "XBI": ["MRNA", "VRTX", "REGN", "BIIB", "GILD", "AMGN", "ILMN", "EXAS", "SGEN", "ALNY"],
+    "XLK": ["AAPL", "MSFT", "NVDA", "AVGO", "CRM", "ADBE", "CSCO", "ACN", "ORCL", "IBM"],
+    "XLV": ["UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "DHR", "ABT", "BMY"],
+    "XLF": ["BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "C"],
+    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL"],
+    "XLY": ["AMZN", "TSLA", "HD", "MCD", "NKE", "LOW", "SBUX", "TJX", "BKNG", "CMG"],
+    "XLI": ["CAT", "UNP", "HON", "BA", "GE", "RTX", "DE", "LMT", "UPS", "MMM"],
+    "XLB": ["LIN", "APD", "SHW", "ECL", "DD", "FCX", "NEM", "DOW", "NUE", "VMC"],
+    "XLRE": ["PLD", "AMT", "EQIX", "CCI", "SPG", "PSA", "O", "DLR", "WELL", "AVB"],
+    "XLC": ["META", "GOOGL", "NFLX", "DIS", "T", "VZ", "CMCSA", "CHTR", "TMUS", "EA"],
+    "SMH": ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "TXN", "INTC", "MU", "AMAT"]
 }
 
 @st.cache_data(ttl=60)
@@ -166,31 +166,42 @@ def get_sector_holdings_data(etf_symbol):
             hist = ticker.history(period="5d")
             info = ticker.info
             company_name = info.get("shortName", symbol)
+            revenue_growth = info.get("revenueGrowth", 0) or 0
+            profit_margin = info.get("profitMargins", 0) or 0
+            
             if len(hist) >= 2:
                 current = hist['Close'].iloc[-1]
                 previous = hist['Close'].iloc[-2]
                 change = ((current - previous) / previous) * 100
+                score = change + (revenue_growth * 100) + (profit_margin * 50)
                 data.append({
                     "Sembol": symbol,
                     "Şirket": company_name[:25],
                     "Fiyat ($)": round(current, 2),
-                    "Değişim (%)": round(change, 2)
+                    "Değişim (%)": round(change, 2),
+                    "Gelir Büyümesi (%)": round(revenue_growth * 100, 1),
+                    "Kar Marjı (%)": round(profit_margin * 100, 1),
+                    "_score": score
                 })
             elif len(hist) == 1:
                 data.append({
                     "Sembol": symbol,
                     "Şirket": company_name[:25],
                     "Fiyat ($)": round(hist['Close'].iloc[-1], 2),
-                    "Değişim (%)": 0
+                    "Değişim (%)": 0,
+                    "Gelir Büyümesi (%)": round(revenue_growth * 100, 1),
+                    "Kar Marjı (%)": round(profit_margin * 100, 1),
+                    "_score": (revenue_growth * 100) + (profit_margin * 50)
                 })
         except:
-            data.append({
-                "Sembol": symbol,
-                "Şirket": symbol,
-                "Fiyat ($)": "-",
-                "Değişim (%)": 0
-            })
-    return pd.DataFrame(data)
+            pass
+    
+    if data:
+        df = pd.DataFrame(data)
+        df = df.sort_values(by="_score", ascending=False).head(5)
+        df = df.drop(columns=["_score"])
+        return df
+    return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def get_portfolio_data():
