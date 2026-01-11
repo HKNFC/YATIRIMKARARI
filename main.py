@@ -52,13 +52,13 @@ NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY")
 
 @st.cache_data(ttl=900)
 def fetch_market_news(market="US"):
-    """Fetch financial news for the selected market (cached for 15 minutes)"""
+    """Fetch financial news for the selected market in Turkish (cached for 15 minutes)"""
     if not NEWSAPI_KEY:
         return None
     
     try:
         if market == "US":
-            url = f"https://newsapi.org/v2/top-headlines?country=us&category=business&pageSize=5&apiKey={NEWSAPI_KEY}"
+            url = f"https://newsapi.org/v2/everything?q=ABD+borsası+OR+Wall+Street+OR+Fed+OR+nasdaq+OR+S%26P500&language=tr&sortBy=publishedAt&pageSize=5&apiKey={NEWSAPI_KEY}"
         else:
             url = f"https://newsapi.org/v2/everything?q=borsa+istanbul+OR+BIST+OR+türk+ekonomi&language=tr&sortBy=publishedAt&pageSize=5&apiKey={NEWSAPI_KEY}"
         
