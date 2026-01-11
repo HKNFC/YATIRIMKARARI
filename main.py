@@ -57,8 +57,18 @@ def get_vix_data():
     except:
         return 18.5, 0
 
+PERIOD_OPTIONS = {
+    "1 Gün": ("2d", 1),
+    "5 Gün": ("7d", 5),
+    "15 Gün": ("20d", 15),
+    "1 Ay": ("35d", 22),
+    "3 Ay": ("100d", 63),
+    "6 Ay": ("200d", 126),
+    "1 Yıl": ("400d", 252)
+}
+
 @st.cache_data(ttl=300)
-def get_sector_data():
+def get_sector_data(period_key="1 Gün"):
     sector_etfs = {
         "Yapay Zeka (BOTZ)": "BOTZ",
         "Siber Güvenlik (HACK)": "HACK",
@@ -67,18 +77,27 @@ def get_sector_data():
         "Biyoteknoloji (XBI)": "XBI"
     }
     
+    fetch_period, lookback_days = PERIOD_OPTIONS.get(period_key, ("2d", 1))
+    
     results = []
     for name, symbol in sector_etfs.items():
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="5d")
-            if len(hist) >= 2:
+            hist = ticker.history(period=fetch_period)
+            if len(hist) > lookback_days:
                 current = hist['Close'].iloc[-1]
-                previous = hist['Close'].iloc[-2]
+                previous = hist['Close'].iloc[-(lookback_days + 1)]
                 change = ((current - previous) / previous) * 100
-                results.append({"Sektör": name, "Para Girişi (%)": round(change, 2)})
+                results.append({"Sektör": name, "Değişim (%)": round(change, 2)})
+            elif len(hist) >= 2:
+                current = hist['Close'].iloc[-1]
+                previous = hist['Close'].iloc[0]
+                change = ((current - previous) / previous) * 100
+                results.append({"Sektör": name, "Değişim (%)": round(change, 2)})
+            else:
+                results.append({"Sektör": name, "Değişim (%)": 0})
         except:
-            results.append({"Sektör": name, "Para Girişi (%)": 0})
+            results.append({"Sektör": name, "Değişim (%)": 0})
     
     return pd.DataFrame(results)
 
@@ -257,28 +276,35 @@ col3.metric("Önerilen Strateji", "Alım Yapılabilir" if market_status == "GÜV
 
 st.divider()
 
-st.header("🔥 Bugünün En Sıcak Sektörleri")
+st.header("🔥 Sektörel Performans")
+
+selected_period = st.radio(
+    "Zaman Aralığı Seçin:",
+    options=list(PERIOD_OPTIONS.keys()),
+    horizontal=True,
+    index=0
+)
 
 with st.spinner("Sektör verileri yükleniyor..."):
-    sector_data = get_sector_data()
+    sector_data = get_sector_data(selected_period)
 
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
-    st.write("Sektörel Para Akışı (Günlük)")
-    st.dataframe(sector_data.sort_values(by="Para Girişi (%)", ascending=False), hide_index=True)
+    st.write(f"Sektörel Para Akışı ({selected_period})")
+    st.dataframe(sector_data.sort_values(by="Değişim (%)", ascending=False), hide_index=True)
 
 with col_right:
     fig = go.Figure(go.Bar(
         x=sector_data["Sektör"],
-        y=sector_data["Para Girişi (%)"],
-        marker_color=['green' if x > 0 else 'red' for x in sector_data["Para Girişi (%)"]],
-        text=[f"{x:+.2f}%" for x in sector_data["Para Girişi (%)"]],
+        y=sector_data["Değişim (%)"],
+        marker_color=['green' if x > 0 else 'red' for x in sector_data["Değişim (%)"]],
+        text=[f"{x:+.2f}%" for x in sector_data["Değişim (%)"]],
         textposition='outside'
     ))
     fig.update_layout(
-        title="Sektör ETF Performansı",
-        yaxis_title="Günlük Değişim (%)",
+        title=f"Sektör ETF Performansı ({selected_period})",
+        yaxis_title=f"Değişim ({selected_period}) (%)",
         showlegend=False
     )
     st.plotly_chart(fig, use_container_width=True)
