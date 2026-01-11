@@ -6,7 +6,6 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
 from streamlit_autorefresh import st_autorefresh
-from streamlit_plotly_events import plotly_events
 import os
 
 st.set_page_config(page_title="Morning Alpha Dashboard", layout="wide")
@@ -428,26 +427,28 @@ fig = go.Figure(go.Bar(
     textfont=dict(size=11)
 ))
 fig.update_layout(
-    title=f"Sektör ETF Performansı ({selected_period}) - Detay için çubuğa tıklayın",
+    title=f"Sektör ETF Performansı ({selected_period})",
     yaxis_title=f"Değişim ({selected_period}) (%)",
     showlegend=False,
     height=500,
     yaxis=dict(range=[y_min, y_max]),
     margin=dict(t=60, b=80)
 )
-
-clicked_points = plotly_events(fig, click_event=True, select_event=False, key="sector_chart_events")
-
-if clicked_points:
-    clicked_x = clicked_points[0].get("x", None)
-    if clicked_x and clicked_x in list(SECTOR_ETFS.keys()):
-        st.session_state.selected_sector_name = clicked_x
+st.plotly_chart(fig, use_container_width=True)
 
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
     st.subheader(f"📊 Sektörel Para Akışı ({selected_period})")
-    st.dataframe(sorted_sector_data, hide_index=True, use_container_width=True)
+    st.caption("Detay görmek için sektöre tıklayın:")
+    
+    for idx, row in sorted_sector_data.iterrows():
+        sector_name = row["Sektör"]
+        change_val = row["Değişim (%)"]
+        color = "🟢" if change_val > 0 else "🔴" if change_val < 0 else "⚪"
+        
+        if st.button(f"{color} {sector_name}: {change_val:+.2f}%", key=f"btn_{sector_name}", use_container_width=True):
+            st.session_state.selected_sector_name = sector_name
 
 with col_right:
     st.subheader("🔍 Sektör Detayı")
