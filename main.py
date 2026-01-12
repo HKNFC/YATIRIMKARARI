@@ -227,6 +227,43 @@ else:
 
 st.sidebar.divider()
 
+st.sidebar.header("👤 Yatırımcı Profiline Göre Hisse Seçimi")
+investor_profile = st.sidebar.selectbox(
+    "Yatırımcı Profilinizi Seçin:",
+    options=["Seçiniz", "Muhafazakar", "Orta Riskli", "Riski Seven"],
+    index=0
+)
+
+INVESTOR_PROFILES = {
+    "Muhafazakar": {
+        "description": "Sermaye Koruma ve Düzenli Gelir",
+        "beta_min": 0.50, "beta_max": 0.85,
+        "pe_max": 15,
+        "dividend_min": 3.0,
+        "debt_equity_max": 0.50,
+        "preferred": "Blue-Chip, Temettü Aristokratları"
+    },
+    "Orta Riskli": {
+        "description": "Dengeli Büyüme ve Enflasyon Üstü Getiri",
+        "beta_min": 0.90, "beta_max": 1.10,
+        "pe_min": 10, "pe_max": 25,
+        "peg_min": 1.0, "peg_max": 1.5,
+        "dividend_min": 1.0, "dividend_max": 2.0,
+        "debt_equity_max": 1.20,
+        "preferred": "Mega-Cap Growth ve Value Hisseleri"
+    },
+    "Riski Seven": {
+        "description": "Maksimum Sermaye Değerlemesi (Alfa)",
+        "beta_min": 1.20, "beta_max": 3.00,
+        "pe_min": 25,
+        "peg_max": 1.0,
+        "dividend_max": 0.5,
+        "preferred": "Small-Cap, Teknoloji, Biyoteknoloji"
+    }
+}
+
+st.sidebar.divider()
+
 st.title("📊 Yatırım Karar Destek Paneli")
 market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İstanbul)"
 st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
@@ -746,6 +783,118 @@ def get_money_flow_portfolio(period_key="1 Gün", market="US"):
         return pd.DataFrame()
     
     return pd.DataFrame(final_picks)
+
+@st.cache_data(ttl=120)
+def get_profile_based_stocks(profile_name, market="US"):
+    """Yatırımcı profiline göre hisse seçimi yapar"""
+    if profile_name not in INVESTOR_PROFILES:
+        return pd.DataFrame()
+    
+    profile = INVESTOR_PROFILES[profile_name]
+    
+    if market == "US":
+        all_symbols = []
+        for symbols in SECTOR_HOLDINGS.values():
+            all_symbols.extend(symbols)
+        all_symbols = list(set(all_symbols))
+        currency = "$"
+        price_col = "Fiyat ($)"
+    else:
+        all_symbols = []
+        for symbols in BIST_SECTOR_HOLDINGS.values():
+            all_symbols.extend(symbols)
+        all_symbols = list(set(all_symbols))
+        currency = "₺"
+        price_col = "Fiyat (₺)"
+    
+    matching_stocks = []
+    
+    for symbol in all_symbols[:50]:
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            hist = ticker.history(period="5d")
+            
+            if len(hist) < 2:
+                continue
+            
+            beta = info.get("beta", 1.0) or 1.0
+            pe = info.get("forwardPE") or info.get("trailingPE") or 0
+            peg = info.get("pegRatio") or 0
+            dividend_yield = (info.get("dividendYield") or 0) * 100
+            debt_equity = info.get("debtToEquity") or 0
+            if debt_equity > 10:
+                debt_equity = debt_equity / 100
+            
+            current_price = hist['Close'].iloc[-1]
+            prev_price = hist['Close'].iloc[-2]
+            daily_change = ((current_price - prev_price) / prev_price) * 100
+            
+            company_name = info.get("shortName", symbol.replace(".IS", ""))
+            
+            score = 0
+            max_score = 0
+            
+            if "beta_min" in profile and "beta_max" in profile:
+                max_score += 1
+                if profile["beta_min"] <= beta <= profile["beta_max"]:
+                    score += 1
+            
+            if "pe_max" in profile:
+                max_score += 1
+                if pe > 0 and pe <= profile["pe_max"]:
+                    score += 1
+            elif "pe_min" in profile:
+                max_score += 1
+                if pe >= profile["pe_min"]:
+                    score += 1
+            
+            if "dividend_min" in profile:
+                max_score += 1
+                if dividend_yield >= profile["dividend_min"]:
+                    score += 1
+            elif "dividend_max" in profile:
+                max_score += 1
+                if dividend_yield <= profile["dividend_max"]:
+                    score += 1
+            
+            if "debt_equity_max" in profile:
+                max_score += 1
+                if debt_equity <= profile["debt_equity_max"]:
+                    score += 1
+            
+            if "peg_max" in profile:
+                max_score += 1
+                if peg > 0 and peg <= profile["peg_max"]:
+                    score += 1
+            elif "peg_min" in profile and "peg_max" in profile:
+                max_score += 1
+                if profile["peg_min"] <= peg <= profile["peg_max"]:
+                    score += 1
+            
+            match_percent = (score / max_score * 100) if max_score > 0 else 0
+            
+            if match_percent >= 40:
+                matching_stocks.append({
+                    "Sembol": symbol,
+                    "Şirket": company_name[:25],
+                    price_col: round(current_price, 2),
+                    "Günlük Değişim (%)": round(daily_change, 2),
+                    "Beta": round(beta, 2),
+                    "F/K": round(pe, 1) if pe else "-",
+                    "Temettü (%)": round(dividend_yield, 2),
+                    "Borç/Özkaynak": round(debt_equity, 2),
+                    "Uyum (%)": round(match_percent, 0)
+                })
+        except:
+            continue
+    
+    if not matching_stocks:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame(matching_stocks)
+    df = df.sort_values(by="Uyum (%)", ascending=False).head(10)
+    return df
 
 BACKTEST_INTERVALS = {
     "Haftalık": 7,
@@ -1281,6 +1430,115 @@ if selected_market == "US":
 else:
     col2.metric("BIST-100", f"{bist_val:,.0f}", delta=f"{bist_change:+.2f}%")
     col3.metric("USD/TRY", f"₺{usd_val:.2f}", delta=f"{usd_change:+.2f}%")
+
+if investor_profile != "Seçiniz":
+    st.divider()
+    st.header(f"👤 {investor_profile} Yatırımcı Profili")
+    
+    profile_info = INVESTOR_PROFILES[investor_profile]
+    st.info(f"**Hedef:** {profile_info['description']} | **Tercih:** {profile_info['preferred']}")
+    
+    with st.expander("📋 Profil Kriterleri", expanded=False):
+        crit_col1, crit_col2, crit_col3 = st.columns(3)
+        with crit_col1:
+            if "beta_min" in profile_info:
+                st.write(f"**Beta:** {profile_info['beta_min']} - {profile_info['beta_max']}")
+            if "pe_max" in profile_info:
+                st.write(f"**F/K:** < {profile_info['pe_max']}")
+            elif "pe_min" in profile_info:
+                st.write(f"**F/K:** > {profile_info['pe_min']}")
+        with crit_col2:
+            if "dividend_min" in profile_info:
+                st.write(f"**Temettü:** > %{profile_info['dividend_min']}")
+            elif "dividend_max" in profile_info:
+                st.write(f"**Temettü:** < %{profile_info['dividend_max']}")
+            if "debt_equity_max" in profile_info:
+                st.write(f"**Borç/Özkaynak:** < {profile_info['debt_equity_max']}")
+        with crit_col3:
+            if "peg_max" in profile_info:
+                st.write(f"**PEG:** < {profile_info['peg_max']}")
+            if "peg_min" in profile_info and "peg_max" in profile_info:
+                st.write(f"**PEG:** {profile_info['peg_min']} - {profile_info['peg_max']}")
+    
+    with st.spinner(f"{investor_profile} profiline uygun hisseler aranıyor..."):
+        profile_stocks = get_profile_based_stocks(investor_profile, selected_market)
+    
+    if not profile_stocks.empty:
+        st.success(f"**{len(profile_stocks)} hisse bulundu** - Kriterlere uyum yüzdesine göre sıralanmış")
+        
+        def color_profile_stocks(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+                return f'color: {color}'
+            return ''
+        
+        numeric_cols_pf = profile_stocks.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+        format_dict_pf = {col: "{:.2f}" for col in numeric_cols_pf}
+        if "Uyum (%)" in format_dict_pf:
+            format_dict_pf["Uyum (%)"] = "{:.0f}"
+        styled_profile = profile_stocks.style.format(format_dict_pf).map(color_profile_stocks, subset=['Günlük Değişim (%)'])
+        st.dataframe(styled_profile, hide_index=True, use_container_width=True)
+        
+        st.subheader("💼 Profil Portföyünü Kaydet")
+        session = get_session()
+        existing_pf = session.query(UserPortfolio.portfolio_name).distinct().all()
+        existing_pf_names = [p[0] for p in existing_pf if p[0]]
+        session.close()
+        next_pf_num = len(existing_pf_names) + 1
+        default_pf_name = f"{investor_profile} Portföy {next_pf_num}"
+        
+        with st.form("save_profile_portfolio_form"):
+            col_prf1, col_prf2 = st.columns(2)
+            with col_prf1:
+                profile_pf_name = st.text_input("Portföy Adı", value=default_pf_name, key="profile_pf_name")
+            with col_prf2:
+                profile_investment = st.text_input("Toplam Yatırım (USD)", value="10.000", key="profile_investment")
+            save_profile_btn = st.form_submit_button("💾 Profil Portföyü Oluştur", type="primary")
+            
+            if save_profile_btn:
+                try:
+                    pf_amount = int(profile_investment.replace(".", "").replace(",", ""))
+                    if pf_amount < 100:
+                        st.error("Minimum yatırım tutarı $100 olmalıdır.")
+                        st.stop()
+                except ValueError:
+                    st.error("Geçerli bir tutar girin (örn: 10.000)")
+                    st.stop()
+                
+                if not profile_pf_name.strip():
+                    st.error("Portföy adı boş olamaz.")
+                    st.stop()
+                
+                session = get_session()
+                try:
+                    stock_count_pf = len(profile_stocks)
+                    per_stock_pf = pf_amount / stock_count_pf
+                    price_col = "Fiyat ($)" if selected_market == "US" else "Fiyat (₺)"
+                    
+                    for _, row in profile_stocks.iterrows():
+                        symbol = row['Sembol']
+                        current_price = row[price_col] if price_col in row else 100
+                        quantity = per_stock_pf / current_price if current_price > 0 else 0
+                        
+                        new_holding = UserPortfolio(
+                            symbol=symbol,
+                            sector=investor_profile,
+                            quantity=quantity,
+                            buy_price=current_price,
+                            portfolio_name=profile_pf_name.strip()
+                        )
+                        session.add(new_holding)
+                    
+                    session.commit()
+                    st.success(f"✅ '{profile_pf_name}' portföyü {stock_count_pf} hisse ile oluşturuldu!")
+                    st.rerun()
+                except Exception as e:
+                    session.rollback()
+                    st.error(f"Hata: {str(e)}")
+                finally:
+                    session.close()
+    else:
+        st.warning("Bu kriterlere uygun hisse bulunamadı. Lütfen farklı bir profil deneyin.")
 
 st.divider()
 
