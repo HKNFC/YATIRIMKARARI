@@ -2215,6 +2215,27 @@ try:
                 st.caption(f"💰 Yatırım: ${total_inv:,.0f}")
                 st.caption(f"💵 Güncel: ${current_value:,.0f}")
                 st.write(f"**Performans:** {perf_text}")
+                
+                st.markdown("---")
+                st.markdown("**Hisse Detayları:**")
+                for stock in pf_stocks:
+                    s_price, _ = get_stock_price(stock.symbol)
+                    if s_price and stock.buy_price > 0:
+                        s_perf = ((s_price - stock.buy_price) / stock.buy_price) * 100
+                        s_icon = "🟢" if s_perf >= 0 else "🔴"
+                        st.caption(f"{s_icon} {stock.symbol}: ${stock.buy_price:.2f} → ${s_price:.2f} ({s_perf:+.1f}%)")
+                    else:
+                        st.caption(f"⚪ {stock.symbol}: ${stock.buy_price:.2f}")
+                
+                st.markdown("---")
+                if st.button(f"🗑️ Portföyü Sil", key=f"del_pf_{pf_name}"):
+                    try:
+                        session_pf.query(UserPortfolio).filter(UserPortfolio.portfolio_name == pf_name).delete()
+                        session_pf.commit()
+                        st.cache_data.clear()
+                        st.rerun()
+                    except:
+                        session_pf.rollback()
     else:
         st.sidebar.info("Henüz portföy oluşturmadınız.")
 except Exception as e:
