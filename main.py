@@ -602,7 +602,12 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
 @st.cache_data(ttl=60)
 def get_portfolio_data(period_key="1 Gün", market="US"):
     sector_df = get_sector_data(period_key, market)
-    sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
+    
+    if "Para Akışı (%)" in sector_df.columns:
+        sector_df["Kombine Skor"] = sector_df["Değişim (%)"] * 0.5 + sector_df["Para Akışı (%)"] * 0.5
+        sector_df = sector_df.sort_values(by="Kombine Skor", ascending=False)
+    else:
+        sector_df = sector_df.sort_values(by="Değişim (%)", ascending=False)
     
     if market == "US":
         sector_map = US_SECTOR_ETFS
