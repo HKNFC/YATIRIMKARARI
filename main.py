@@ -32,6 +32,7 @@ class UserPortfolio(Base):
     buy_price = Column(Float)
     added_at = Column(DateTime, default=datetime.now)
     portfolio_name = Column(String(100), default='Portföy 1')
+    time_period = Column(String(20), default='5 Gün')
 
 class PriceAlert(Base):
     __tablename__ = 'price_alerts'
@@ -1747,7 +1748,8 @@ if not portfolio.empty:
                         sector=sector,
                         quantity=quantity,
                         buy_price=current_price,
-                        portfolio_name=portfolio_name_input.strip()
+                        portfolio_name=portfolio_name_input.strip(),
+                        time_period=selected_period
                     )
                     session.add(new_holding)
                 
@@ -2209,12 +2211,49 @@ try:
             else:
                 perf_text = "-"
             
-            with st.sidebar.expander(f"📊 {pf_name}", expanded=False):
+            pf_time_period = pf_stocks[0].time_period if pf_stocks and hasattr(pf_stocks[0], 'time_period') and pf_stocks[0].time_period else "5 Gün"
+            pf_symbols = set([s.symbol for s in pf_stocks])
+            
+            try:
+                current_recommendations = get_portfolio_data(pf_time_period, selected_market)
+                if not current_recommendations.empty:
+                    new_symbols = set(current_recommendations['Sembol'].tolist())
+                    to_remove = pf_symbols - new_symbols
+                    to_add = new_symbols - pf_symbols
+                    has_changes = len(to_remove) > 0 or len(to_add) > 0
+                else:
+                    has_changes = False
+                    to_remove = set()
+                    to_add = set()
+            except:
+                has_changes = False
+                to_remove = set()
+                to_add = set()
+            
+            alert_icon = "🔔" if has_changes else "📊"
+            
+            with st.sidebar.expander(f"{alert_icon} {pf_name}", expanded=False):
                 st.caption(f"📅 Oluşturma: {created_date}")
+                st.caption(f"⏱️ Zaman Aralığı: {pf_time_period}")
                 st.caption(f"📈 Hisse Sayısı: {stock_count}")
                 st.caption(f"💰 Yatırım: ${total_inv:,.0f}")
                 st.caption(f"💵 Güncel: ${current_value:,.0f}")
                 st.write(f"**Performans:** {perf_text}")
+                
+                if has_changes:
+                    st.markdown("---")
+                    st.warning("⚠️ **Güncelleme Önerisi**")
+                    if to_remove:
+                        for sym in list(to_remove)[:3]:
+                            matching_new = list(to_add)[:1]
+                            if matching_new:
+                                st.caption(f"🔄 **{sym}** → **{matching_new[0]}** ile değiştir")
+                            else:
+                                st.caption(f"❌ **{sym}** çıkar")
+                    if to_add and len(to_add) > len(to_remove):
+                        extra_adds = list(to_add)[len(to_remove):len(to_remove)+2]
+                        for sym in extra_adds:
+                            st.caption(f"➕ **{sym}** ekle")
                 
                 st.markdown("---")
                 st.markdown("**Hisse Detayları:**")
