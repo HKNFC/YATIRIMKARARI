@@ -1298,13 +1298,14 @@ with st.spinner("Sektör verileri yükleniyor..."):
 
 sorted_sector_data = sector_data.sort_values(by="Değişim (%)", ascending=False)
 
-if "selected_sector_name" not in st.session_state or st.session_state.get("last_market") != selected_market:
+if "selected_sector_name" not in st.session_state or st.session_state.get("last_market") != selected_market or st.session_state.get("last_period") != selected_period:
     if "Para Akışı (%)" in sector_data.columns:
         top_mf_sector = sector_data.sort_values(by="Para Akışı (%)", ascending=False).iloc[0]["Sektör"]
         st.session_state.selected_sector_name = top_mf_sector
     else:
         st.session_state.selected_sector_name = list(CURRENT_SECTOR_MAP.keys())[0]
     st.session_state.last_market = selected_market
+    st.session_state.last_period = selected_period
 
 price_max = sorted_sector_data["Değişim (%)"].max()
 price_min = sorted_sector_data["Değişim (%)"].min()
