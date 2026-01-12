@@ -1209,18 +1209,10 @@ if "selected_sector_name" not in st.session_state or st.session_state.get("last_
 
 price_max = sorted_sector_data["Değişim (%)"].max()
 price_min = sorted_sector_data["Değişim (%)"].min()
-vol_max = sorted_sector_data["Hacim Değişim (%)"].max() if "Hacim Değişim (%)" in sorted_sector_data.columns else 0
-vol_min = sorted_sector_data["Hacim Değişim (%)"].min() if "Hacim Değişim (%)" in sorted_sector_data.columns else 0
+price_y_max = price_max * 1.3 if price_max > 0 else price_max
+price_y_min = price_min * 1.3 if price_min < 0 else price_min
 
-all_max = max(price_max, vol_max)
-all_min = min(price_min, vol_min)
-y_max = all_max * 1.3 if all_max > 0 else all_max
-y_min = all_min * 1.3 if all_min < 0 else all_min
-
-fig = go.Figure()
-
-fig.add_trace(go.Bar(
-    name='Fiyat Değişimi',
+fig_price = go.Figure(go.Bar(
     x=sorted_sector_data["Sektör"],
     y=sorted_sector_data["Değişim (%)"],
     marker_color=['green' if x > 0 else 'red' for x in sorted_sector_data["Değişim (%)"]],
@@ -1230,45 +1222,60 @@ fig.add_trace(go.Bar(
     hovertemplate="<b>%{x}</b><br>Fiyat Değişim: %{y:.2f}%<extra></extra>"
 ))
 
+price_title = f"Fiyat Değişimi ({selected_period})"
+if selected_market == "US":
+    price_title = f"ABD Sektör Fiyat Değişimi ({selected_period})"
+else:
+    price_title = f"BIST Sektör Fiyat Değişimi ({selected_period})"
+
+fig_price.update_layout(
+    title=price_title,
+    yaxis_title="Fiyat Değişimi (%)",
+    showlegend=False,
+    height=400,
+    yaxis=dict(range=[price_y_min, price_y_max]),
+    margin=dict(t=60, b=80)
+)
+
+st.plotly_chart(fig_price, use_container_width=True, key="sector_price_chart")
+
 if "Hacim Değişim (%)" in sorted_sector_data.columns:
-    fig.add_trace(go.Bar(
-        name='Hacim Değişimi',
-        x=sorted_sector_data["Sektör"],
-        y=sorted_sector_data["Hacim Değişim (%)"],
-        marker_color=['#FFD700' if x > 0 else 'white' for x in sorted_sector_data["Hacim Değişim (%)"]],
-        text=[f"{x:+.1f}%" for x in sorted_sector_data["Hacim Değişim (%)"]],
+    vol_sorted = sorted_sector_data.sort_values(by="Hacim Değişim (%)", ascending=False)
+    vol_max = vol_sorted["Hacim Değişim (%)"].max()
+    vol_min = vol_sorted["Hacim Değişim (%)"].min()
+    vol_y_max = vol_max * 1.3 if vol_max > 0 else vol_max
+    vol_y_min = vol_min * 1.3 if vol_min < 0 else vol_min
+    
+    fig_vol = go.Figure(go.Bar(
+        x=vol_sorted["Sektör"],
+        y=vol_sorted["Hacim Değişim (%)"],
+        marker_color=['#FFD700' if x > 0 else 'white' for x in vol_sorted["Hacim Değişim (%)"]],
+        text=[f"{x:+.1f}%" for x in vol_sorted["Hacim Değişim (%)"]],
         textposition='outside',
         textfont=dict(size=10),
         hovertemplate="<b>%{x}</b><br>Hacim Değişim: %{y:.2f}%<extra></extra>",
         marker_line_color='gray',
         marker_line_width=1
     ))
-
-chart_title = f"Sektör Performansı ({selected_period}) - Detay için çubuğa tıklayın"
-if selected_market == "US":
-    chart_title = f"ABD Sektör ETF Performansı ({selected_period})"
+    
+    vol_title = f"Hacim Değişimi ({selected_period})"
+    if selected_market == "US":
+        vol_title = f"ABD Sektör Hacim Değişimi ({selected_period})"
+    else:
+        vol_title = f"BIST Sektör Hacim Değişimi ({selected_period})"
+    
+    fig_vol.update_layout(
+        title=vol_title,
+        yaxis_title="Hacim Değişimi (%)",
+        showlegend=False,
+        height=400,
+        yaxis=dict(range=[vol_y_min, vol_y_max]),
+        margin=dict(t=60, b=80)
+    )
+    
+    event = st.plotly_chart(fig_vol, use_container_width=True, on_select="rerun", key="sector_vol_chart")
 else:
-    chart_title = f"BIST Sektör Performansı ({selected_period})"
-
-fig.update_layout(
-    title=chart_title,
-    yaxis_title=f"Değişim (%)",
-    barmode='group',
-    showlegend=True,
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="center",
-        x=0.5,
-        font=dict(size=11)
-    ),
-    height=550,
-    yaxis=dict(range=[y_min, y_max]),
-    margin=dict(t=80, b=80)
-)
-
-event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="sector_bar_chart")
+    event = None
 
 if event and event.selection and len(event.selection.points) > 0:
     clicked_idx = event.selection.points[0].get("point_index", None)
