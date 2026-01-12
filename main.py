@@ -1332,7 +1332,14 @@ fig_price.update_layout(
     margin=dict(t=60, b=80)
 )
 
-st.plotly_chart(fig_price, use_container_width=True, key="sector_price_chart")
+price_event = st.plotly_chart(fig_price, use_container_width=True, on_select="rerun", key="sector_price_chart")
+
+if price_event and price_event.selection and len(price_event.selection.points) > 0:
+    price_clicked_idx = price_event.selection.points[0].get("point_index", None)
+    if price_clicked_idx is not None:
+        price_clicked_sector = sorted_sector_data.iloc[price_clicked_idx]["Sektör"]
+        if price_clicked_sector in CURRENT_SECTOR_MAP:
+            st.session_state.selected_sector_name = price_clicked_sector
 
 if "Para Akışı (%)" in sorted_sector_data.columns:
     mf_sorted = sorted_sector_data.sort_values(by="Para Akışı (%)", ascending=False)
@@ -1373,7 +1380,7 @@ else:
 if event and event.selection and len(event.selection.points) > 0:
     clicked_idx = event.selection.points[0].get("point_index", None)
     if clicked_idx is not None:
-        clicked_sector = sorted_sector_data.iloc[clicked_idx]["Sektör"]
+        clicked_sector = mf_sorted.iloc[clicked_idx]["Sektör"]
         if clicked_sector in CURRENT_SECTOR_MAP:
             st.session_state.selected_sector_name = clicked_sector
 
