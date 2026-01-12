@@ -227,7 +227,7 @@ else:
 
 st.sidebar.divider()
 
-st.title("☀️ Morning Alpha: Yatırım Karar Destek Paneli")
+st.title("📊 Yatırım Karar Destek Paneli")
 market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İstanbul)"
 st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
 
