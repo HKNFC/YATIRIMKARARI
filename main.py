@@ -253,7 +253,10 @@ def get_sector_data(period_key="1 Gün", market="US"):
                     current_vol = hist['Volume'].iloc[-lookback_days:].sum()
                     previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2)})
+                    current_mf = (hist['Close'].iloc[-lookback_days:] * hist['Volume'].iloc[-lookback_days:]).sum()
+                    previous_mf = (hist['Close'].iloc[:len(hist)-lookback_days] * hist['Volume'].iloc[:len(hist)-lookback_days]).sum()
+                    mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mf_change, 2)})
                 elif len(hist) >= 2:
                     current = hist['Close'].iloc[-1]
                     previous = hist['Close'].iloc[0]
@@ -261,16 +264,20 @@ def get_sector_data(period_key="1 Gün", market="US"):
                     current_vol = hist['Volume'].iloc[-1]
                     previous_vol = hist['Volume'].iloc[0]
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2)})
+                    current_mf = hist['Close'].iloc[-1] * hist['Volume'].iloc[-1]
+                    previous_mf = hist['Close'].iloc[0] * hist['Volume'].iloc[0]
+                    mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mf_change, 2)})
                 else:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
             else:
                 holdings = BIST_SECTOR_HOLDINGS.get(symbol, [])
                 if not holdings:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
                     continue
                 sector_changes = []
                 sector_vol_changes = []
+                sector_mf_changes = []
                 for stock_symbol in holdings[:5]:
                     try:
                         ticker = yf.Ticker(stock_symbol)
@@ -284,6 +291,10 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
+                            current_mf = (hist['Close'].iloc[-lookback_days:] * hist['Volume'].iloc[-lookback_days:]).sum()
+                            previous_mf = (hist['Close'].iloc[:len(hist)-lookback_days] * hist['Volume'].iloc[:len(hist)-lookback_days]).sum()
+                            mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
+                            sector_mf_changes.append(mf_change)
                         elif len(hist) >= 2:
                             current = hist['Close'].iloc[-1]
                             previous = hist['Close'].iloc[0]
@@ -293,16 +304,21 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             previous_vol = hist['Volume'].iloc[0]
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
+                            current_mf = hist['Close'].iloc[-1] * hist['Volume'].iloc[-1]
+                            previous_mf = hist['Close'].iloc[0] * hist['Volume'].iloc[0]
+                            mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
+                            sector_mf_changes.append(mf_change)
                     except:
                         pass
                 if sector_changes:
                     avg_change = sum(sector_changes) / len(sector_changes)
                     avg_vol_change = sum(sector_vol_changes) / len(sector_vol_changes) if sector_vol_changes else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2), "Hacim Değişim (%)": round(avg_vol_change, 2)})
+                    avg_mf_change = sum(sector_mf_changes) / len(sector_mf_changes) if sector_mf_changes else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2), "Hacim Değişim (%)": round(avg_vol_change, 2), "Para Akışı (%)": round(avg_mf_change, 2)})
                 else:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
         except:
-            results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
+            results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
     
     return pd.DataFrame(results)
 
@@ -1273,7 +1289,41 @@ if "Hacim Değişim (%)" in sorted_sector_data.columns:
         margin=dict(t=60, b=80)
     )
     
-    event = st.plotly_chart(fig_vol, use_container_width=True, on_select="rerun", key="sector_vol_chart")
+    st.plotly_chart(fig_vol, use_container_width=True, key="sector_vol_chart")
+
+if "Para Akışı (%)" in sorted_sector_data.columns:
+    mf_sorted = sorted_sector_data.sort_values(by="Para Akışı (%)", ascending=False)
+    mf_max = mf_sorted["Para Akışı (%)"].max()
+    mf_min = mf_sorted["Para Akışı (%)"].min()
+    mf_y_max = mf_max * 1.3 if mf_max > 0 else mf_max
+    mf_y_min = mf_min * 1.3 if mf_min < 0 else mf_min
+    
+    fig_mf = go.Figure(go.Bar(
+        x=mf_sorted["Sektör"],
+        y=mf_sorted["Para Akışı (%)"],
+        marker_color=['#00CED1' if x > 0 else '#FF6B6B' for x in mf_sorted["Para Akışı (%)"]],
+        text=[f"{x:+.1f}%" for x in mf_sorted["Para Akışı (%)"]],
+        textposition='outside',
+        textfont=dict(size=10),
+        hovertemplate="<b>%{x}</b><br>Para Akışı: %{y:.2f}%<extra></extra>"
+    ))
+    
+    mf_title = f"Sektöre Giren Para Değişimi ({selected_period})"
+    if selected_market == "US":
+        mf_title = f"ABD Sektör Para Akışı ({selected_period})"
+    else:
+        mf_title = f"BIST Sektör Para Akışı ({selected_period})"
+    
+    fig_mf.update_layout(
+        title=mf_title,
+        yaxis_title="Para Akışı Değişimi (%)",
+        showlegend=False,
+        height=400,
+        yaxis=dict(range=[mf_y_min, mf_y_max]),
+        margin=dict(t=60, b=80)
+    )
+    
+    event = st.plotly_chart(fig_mf, use_container_width=True, on_select="rerun", key="sector_mf_chart")
 else:
     event = None
 
