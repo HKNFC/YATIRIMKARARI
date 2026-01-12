@@ -245,12 +245,32 @@ def get_sector_data(period_key="1 Gün", market="US"):
         try:
             if market == "US":
                 ticker = yf.Ticker(symbol)
+                hist = ticker.history(period=fetch_period)
+                if len(hist) > lookback_days:
+                    current = hist['Close'].iloc[-1]
+                    previous = hist['Close'].iloc[-(lookback_days + 1)]
+                    change = ((current - previous) / previous) * 100
+                    current_vol = hist['Volume'].iloc[-lookback_days:].sum()
+                    previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
+                    vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2)})
+                elif len(hist) >= 2:
+                    current = hist['Close'].iloc[-1]
+                    previous = hist['Close'].iloc[0]
+                    change = ((current - previous) / previous) * 100
+                    current_vol = hist['Volume'].iloc[-1]
+                    previous_vol = hist['Volume'].iloc[0]
+                    vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2)})
+                else:
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
             else:
                 holdings = BIST_SECTOR_HOLDINGS.get(symbol, [])
                 if not holdings:
-                    results.append({"Sektör": name, "Değişim (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
                     continue
                 sector_changes = []
+                sector_vol_changes = []
                 for stock_symbol in holdings[:5]:
                     try:
                         ticker = yf.Ticker(stock_symbol)
@@ -260,35 +280,29 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             previous = hist['Close'].iloc[-(lookback_days + 1)]
                             change = ((current - previous) / previous) * 100
                             sector_changes.append(change)
+                            current_vol = hist['Volume'].iloc[-lookback_days:].sum()
+                            previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
+                            vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
+                            sector_vol_changes.append(vol_change)
                         elif len(hist) >= 2:
                             current = hist['Close'].iloc[-1]
                             previous = hist['Close'].iloc[0]
                             change = ((current - previous) / previous) * 100
                             sector_changes.append(change)
+                            current_vol = hist['Volume'].iloc[-1]
+                            previous_vol = hist['Volume'].iloc[0]
+                            vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
+                            sector_vol_changes.append(vol_change)
                     except:
                         pass
                 if sector_changes:
                     avg_change = sum(sector_changes) / len(sector_changes)
-                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2)})
+                    avg_vol_change = sum(sector_vol_changes) / len(sector_vol_changes) if sector_vol_changes else 0
+                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2), "Hacim Değişim (%)": round(avg_vol_change, 2)})
                 else:
-                    results.append({"Sektör": name, "Değişim (%)": 0})
-                continue
-            
-            hist = ticker.history(period=fetch_period)
-            if len(hist) > lookback_days:
-                current = hist['Close'].iloc[-1]
-                previous = hist['Close'].iloc[-(lookback_days + 1)]
-                change = ((current - previous) / previous) * 100
-                results.append({"Sektör": name, "Değişim (%)": round(change, 2)})
-            elif len(hist) >= 2:
-                current = hist['Close'].iloc[-1]
-                previous = hist['Close'].iloc[0]
-                change = ((current - previous) / previous) * 100
-                results.append({"Sektör": name, "Değişim (%)": round(change, 2)})
-            else:
-                results.append({"Sektör": name, "Değişim (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
         except:
-            results.append({"Sektör": name, "Değişim (%)": 0})
+            results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0})
     
     return pd.DataFrame(results)
 
@@ -1193,33 +1207,65 @@ if "selected_sector_name" not in st.session_state or st.session_state.get("last_
     st.session_state.selected_sector_name = list(CURRENT_SECTOR_MAP.keys())[0]
     st.session_state.last_market = selected_market
 
-max_val = sorted_sector_data["Değişim (%)"].max()
-min_val = sorted_sector_data["Değişim (%)"].min()
-y_max = max_val * 1.25 if max_val > 0 else max_val
-y_min = min_val * 1.25 if min_val < 0 else min_val
+price_max = sorted_sector_data["Değişim (%)"].max()
+price_min = sorted_sector_data["Değişim (%)"].min()
+vol_max = sorted_sector_data["Hacim Değişim (%)"].max() if "Hacim Değişim (%)" in sorted_sector_data.columns else 0
+vol_min = sorted_sector_data["Hacim Değişim (%)"].min() if "Hacim Değişim (%)" in sorted_sector_data.columns else 0
 
-fig = go.Figure(go.Bar(
+all_max = max(price_max, vol_max)
+all_min = min(price_min, vol_min)
+y_max = all_max * 1.3 if all_max > 0 else all_max
+y_min = all_min * 1.3 if all_min < 0 else all_min
+
+fig = go.Figure()
+
+fig.add_trace(go.Bar(
+    name='Fiyat Değişimi',
     x=sorted_sector_data["Sektör"],
     y=sorted_sector_data["Değişim (%)"],
     marker_color=['green' if x > 0 else 'red' for x in sorted_sector_data["Değişim (%)"]],
-    text=[f"{x:+.2f}%" for x in sorted_sector_data["Değişim (%)"]],
+    text=[f"{x:+.1f}%" for x in sorted_sector_data["Değişim (%)"]],
     textposition='outside',
-    textfont=dict(size=11),
-    hovertemplate="<b>%{x}</b><br>Değişim: %{y:.2f}%<extra></extra>"
+    textfont=dict(size=10),
+    hovertemplate="<b>%{x}</b><br>Fiyat Değişim: %{y:.2f}%<extra></extra>"
 ))
+
+if "Hacim Değişim (%)" in sorted_sector_data.columns:
+    fig.add_trace(go.Bar(
+        name='Hacim Değişimi',
+        x=sorted_sector_data["Sektör"],
+        y=sorted_sector_data["Hacim Değişim (%)"],
+        marker_color=['#FFD700' if x > 0 else 'white' for x in sorted_sector_data["Hacim Değişim (%)"]],
+        text=[f"{x:+.1f}%" for x in sorted_sector_data["Hacim Değişim (%)"]],
+        textposition='outside',
+        textfont=dict(size=10),
+        hovertemplate="<b>%{x}</b><br>Hacim Değişim: %{y:.2f}%<extra></extra>",
+        marker_line_color='gray',
+        marker_line_width=1
+    ))
+
 chart_title = f"Sektör Performansı ({selected_period}) - Detay için çubuğa tıklayın"
 if selected_market == "US":
-    chart_title = f"ABD Sektör ETF Performansı ({selected_period}) - Detay için çubuğa tıklayın"
+    chart_title = f"ABD Sektör ETF Performansı ({selected_period})"
 else:
-    chart_title = f"BIST Sektör Performansı ({selected_period}) - Detay için çubuğa tıklayın"
+    chart_title = f"BIST Sektör Performansı ({selected_period})"
 
 fig.update_layout(
     title=chart_title,
-    yaxis_title=f"Değişim ({selected_period}) (%)",
-    showlegend=False,
-    height=500,
+    yaxis_title=f"Değişim (%)",
+    barmode='group',
+    showlegend=True,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="center",
+        x=0.5,
+        font=dict(size=11)
+    ),
+    height=550,
     yaxis=dict(range=[y_min, y_max]),
-    margin=dict(t=60, b=80)
+    margin=dict(t=80, b=80)
 )
 
 event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="sector_bar_chart")
