@@ -2177,6 +2177,53 @@ with st.form("add_alert_form"):
 
 st.divider()
 
+st.sidebar.header("📁 Portföylerim")
+session_pf = get_session()
+try:
+    from sqlalchemy import func
+    portfolio_summary = session_pf.query(
+        UserPortfolio.portfolio_name,
+        func.min(UserPortfolio.added_at).label('created_at'),
+        func.count(UserPortfolio.id).label('stock_count'),
+        func.sum(UserPortfolio.quantity * UserPortfolio.buy_price).label('total_investment')
+    ).group_by(UserPortfolio.portfolio_name).all()
+    
+    if portfolio_summary:
+        for pf in portfolio_summary:
+            pf_name = pf.portfolio_name or "İsimsiz"
+            created_date = pf.created_at.strftime("%d/%m/%Y") if pf.created_at else "-"
+            stock_count = pf.stock_count or 0
+            total_inv = pf.total_investment or 0
+            
+            pf_stocks = session_pf.query(UserPortfolio).filter(UserPortfolio.portfolio_name == pf_name).all()
+            current_value = 0
+            for stock in pf_stocks:
+                price, _ = get_stock_price(stock.symbol)
+                if price:
+                    current_value += stock.quantity * price
+            
+            if total_inv > 0:
+                performance = ((current_value - total_inv) / total_inv) * 100
+                perf_color = "🟢" if performance >= 0 else "🔴"
+                perf_text = f"{perf_color} {performance:+.1f}%"
+            else:
+                perf_text = "-"
+            
+            with st.sidebar.expander(f"📊 {pf_name}", expanded=False):
+                st.caption(f"📅 Oluşturma: {created_date}")
+                st.caption(f"📈 Hisse Sayısı: {stock_count}")
+                st.caption(f"💰 Yatırım: ${total_inv:,.0f}")
+                st.caption(f"💵 Güncel: ${current_value:,.0f}")
+                st.write(f"**Performans:** {perf_text}")
+    else:
+        st.sidebar.info("Henüz portföy oluşturmadınız.")
+except Exception as e:
+    st.sidebar.warning("Portföy bilgisi yüklenemedi.")
+finally:
+    session_pf.close()
+
+st.sidebar.divider()
+
 st.sidebar.header("🗓️ Günlük Finansal Haberler")
 news_items = fetch_market_news(selected_market)
 if news_items:
