@@ -673,6 +673,80 @@ def get_portfolio_data(period_key="1 Gün", market="US"):
     
     return pd.DataFrame(final_picks)
 
+@st.cache_data(ttl=60)
+def get_money_flow_portfolio(period_key="1 Gün", market="US"):
+    """Sadece para akışına göre hisse seçimi yapar"""
+    sector_df = get_sector_data(period_key, market)
+    
+    if "Para Akışı (%)" not in sector_df.columns:
+        return pd.DataFrame()
+    
+    sector_df = sector_df.sort_values(by="Para Akışı (%)", ascending=False)
+    
+    if market == "US":
+        sector_map = US_SECTOR_ETFS
+    else:
+        sector_map = BIST_SECTORS
+    
+    top_6_sectors = sector_df.head(6)
+    
+    sector_candidates = {}
+    sector_quotas = {}
+    
+    for idx, row in top_6_sectors.iterrows():
+        sector_name = row["Sektör"]
+        sector_key = sector_map.get(sector_name, "")
+        rank = list(top_6_sectors.index).index(idx) + 1
+        
+        candidates = get_all_sector_candidates(sector_key, sector_name, market)
+        sector_candidates[sector_name] = candidates
+        sector_quotas[sector_name] = 2 if rank <= 4 else 1
+    
+    symbol_best_sector = {}
+    for sector_name, candidates in sector_candidates.items():
+        for candidate in candidates:
+            symbol = candidate["Sembol"]
+            score = candidate["Toplam Puan"]
+            if symbol not in symbol_best_sector or score > symbol_best_sector[symbol]["score"]:
+                symbol_best_sector[symbol] = {"sector": sector_name, "score": score}
+    
+    final_picks = []
+    used_symbols = set()
+    
+    for sector_name in sector_quotas.keys():
+        quota = sector_quotas[sector_name]
+        candidates = sector_candidates[sector_name]
+        selected = 0
+        
+        for candidate in candidates:
+            if selected >= quota:
+                break
+            symbol = candidate["Sembol"]
+            
+            if symbol in used_symbols:
+                continue
+            
+            if symbol_best_sector[symbol]["sector"] == sector_name:
+                final_picks.append(candidate)
+                used_symbols.add(symbol)
+                selected += 1
+            else:
+                continue
+        
+        for candidate in candidates:
+            if selected >= quota:
+                break
+            symbol = candidate["Sembol"]
+            if symbol not in used_symbols:
+                final_picks.append(candidate)
+                used_symbols.add(symbol)
+                selected += 1
+    
+    if not final_picks:
+        return pd.DataFrame()
+    
+    return pd.DataFrame(final_picks)
+
 BACKTEST_INTERVALS = {
     "Haftalık": 7,
     "2 Haftalık": 14,
@@ -1417,6 +1491,100 @@ if not portfolio.empty:
                 session.close()
 else:
     st.info("Portföy verisi bulunamadı.")
+
+st.divider()
+
+st.header("💰 Para Akışına Göre Seçimler")
+market_name_mf = "ABD" if selected_market == "US" else "BIST"
+st.success(f"**{market_name_mf} için para girişi en yüksek sektörlerden 10 hisse**")
+
+with st.spinner("Para akışı verileri yükleniyor..."):
+    mf_portfolio = get_money_flow_portfolio(selected_period, selected_market)
+
+if not mf_portfolio.empty:
+    def color_mf_portfolio(val):
+        if isinstance(val, (int, float)):
+            color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
+            return f'color: {color}'
+        return ''
+    
+    numeric_cols_mf = mf_portfolio.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns.tolist()
+    format_dict_mf = {col: "{:.2f}" for col in numeric_cols_mf}
+    styled_mf_portfolio = mf_portfolio.style.format(format_dict_mf).map(color_mf_portfolio, subset=['Günlük Değişim (%)'])
+    st.dataframe(styled_mf_portfolio, hide_index=True, use_container_width=True)
+    
+    st.subheader("💼 Para Akışı Portföyünü Kaydet")
+    
+    session = get_session()
+    existing_portfolios_mf = session.query(UserPortfolio.portfolio_name).distinct().all()
+    existing_names_mf = [p[0] for p in existing_portfolios_mf if p[0]]
+    session.close()
+    next_portfolio_num_mf = len(existing_names_mf) + 1
+    default_name_mf = f"Para Akışı {next_portfolio_num_mf}"
+    
+    with st.form("save_mf_portfolio_form"):
+        col_mf1, col_mf2 = st.columns(2)
+        with col_mf1:
+            mf_portfolio_name = st.text_input(
+                "Portföy Adı",
+                value=default_name_mf,
+                help="Bu portföye bir isim verin",
+                key="mf_portfolio_name"
+            )
+        with col_mf2:
+            mf_investment = st.text_input(
+                "Toplam Yatırım (USD)",
+                value="10.000",
+                help="Binlik ayırıcı olarak nokta kullanın",
+                key="mf_investment"
+            )
+        save_mf_btn = st.form_submit_button("💾 Para Akışı Portföyü Oluştur", type="primary")
+        
+        if save_mf_btn:
+            try:
+                mf_amount = int(mf_investment.replace(".", "").replace(",", ""))
+                if mf_amount < 100:
+                    st.error("Minimum yatırım tutarı $100 olmalıdır.")
+                    st.stop()
+            except ValueError:
+                st.error("Geçerli bir tutar girin (örn: 10.000)")
+                st.stop()
+            
+            if not mf_portfolio_name.strip():
+                st.error("Portföy adı boş olamaz.")
+                st.stop()
+                
+            session = get_session()
+            try:
+                stock_count_mf = len(mf_portfolio)
+                per_stock_mf = mf_amount / stock_count_mf
+                
+                for _, row in mf_portfolio.iterrows():
+                    symbol = row['Sembol']
+                    price_col = PRICE_COL_NAME
+                    current_price = row[price_col] if price_col in row else row.get('Fiyat ($)', row.get('Fiyat (₺)', 100))
+                    quantity = per_stock_mf / current_price if current_price > 0 else 0
+                    sector = row.get('Sektör', 'Bilinmiyor')
+                    
+                    new_holding = UserPortfolio(
+                        symbol=symbol,
+                        sector=sector,
+                        quantity=quantity,
+                        buy_price=current_price,
+                        portfolio_name=mf_portfolio_name.strip()
+                    )
+                    session.add(new_holding)
+                
+                session.commit()
+                st.success(f"✅ '{mf_portfolio_name}' adlı portföy {stock_count_mf} hisse ile oluşturuldu! Toplam: ${mf_amount:,}")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Portföy oluşturulurken hata: {str(e)}")
+            finally:
+                session.close()
+else:
+    st.info("Para akışı verisi bulunamadı.")
 
 st.divider()
 
