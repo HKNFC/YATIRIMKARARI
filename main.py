@@ -51,6 +51,24 @@ def get_session():
     return Session()
 
 NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+def send_telegram_message(message):
+    """Send a message via Telegram bot"""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        response = requests.post(url, data=data, timeout=10)
+        return response.status_code == 200
+    except Exception:
+        return False
 
 @st.cache_data(ttl=900)
 def fetch_market_news(market="US"):
@@ -2243,17 +2261,31 @@ try:
                 if has_changes:
                     st.markdown("---")
                     st.warning("⚠️ **Güncelleme Önerisi**")
+                    change_messages = []
                     if to_remove:
                         for sym in list(to_remove)[:3]:
                             matching_new = list(to_add)[:1]
                             if matching_new:
                                 st.caption(f"🔄 **{sym}** → **{matching_new[0]}** ile değiştir")
+                                change_messages.append(f"🔄 {sym} → {matching_new[0]} ile değiştir")
                             else:
                                 st.caption(f"❌ **{sym}** çıkar")
+                                change_messages.append(f"❌ {sym} çıkar")
                     if to_add and len(to_add) > len(to_remove):
                         extra_adds = list(to_add)[len(to_remove):len(to_remove)+2]
                         for sym in extra_adds:
                             st.caption(f"➕ **{sym}** ekle")
+                            change_messages.append(f"➕ {sym} ekle")
+                    
+                    if st.button("📲 Telegram'a Gönder", key=f"tg_{pf_name}"):
+                        msg = f"📊 <b>{pf_name}</b> Güncelleme Önerisi\n"
+                        msg += f"⏱️ Zaman Aralığı: {pf_time_period}\n"
+                        msg += f"📈 Performans: {perf_text}\n\n"
+                        msg += "\n".join(change_messages)
+                        if send_telegram_message(msg):
+                            st.success("✅ Telegram'a gönderildi!")
+                        else:
+                            st.error("Gönderilemedi. Token/Chat ID kontrol edin.")
                 
                 st.markdown("---")
                 st.markdown("**Hisse Detayları:**")
@@ -2304,6 +2336,19 @@ else:
 - **Dikkat:** Dolar/TL paritesi volatiliteyi etkiliyor.
 """)
     st.sidebar.caption("⚠️ Haber servisi bağlanamadı - varsayılan notlar")
+
+st.sidebar.divider()
+
+st.sidebar.header("📲 Telegram Bildirimleri")
+if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    st.sidebar.success("✅ Telegram bağlı")
+    if st.sidebar.button("🔔 Test Mesajı Gönder"):
+        if send_telegram_message("✅ Morning Alpha Dashboard bağlantısı başarılı!"):
+            st.sidebar.success("Test mesajı gönderildi!")
+        else:
+            st.sidebar.error("Mesaj gönderilemedi")
+else:
+    st.sidebar.warning("⚠️ Telegram ayarlanmamış")
 
 st.sidebar.divider()
 
