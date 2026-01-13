@@ -1439,18 +1439,37 @@ if triggered_alerts:
 with st.spinner("Piyasa verileri yükleniyor..."):
     if selected_market == "US":
         vix_val, vix_change = get_vix_data()
-        market_status = "GÜVENLİ" if vix_val < 25 else "RİSKLİ"
+        if vix_val < 15:
+            market_status = "REHAVET"
+            strategy = "Dikkatli Ol"
+            strategy_detail = "Piyasa 'pahalı' olabilir. Yeni büyük pozisyonlar için riskli."
+        elif vix_val < 20:
+            market_status = "STABIL"
+            strategy = "Stratejik Alım"
+            strategy_detail = "Kaliteli şirketlerde pozisyon artırmak için ideal bölge."
+        elif vix_val < 30:
+            market_status = "BELİRSİZLİK"
+            strategy = "Seçici Alım"
+            strategy_detail = "Volatilite artmış. Kademeli alım (DCA) için fırsatlar başlar."
+        else:
+            market_status = "PANİK"
+            strategy = "Fırsat Alımı"
+            strategy_detail = "Kontrariyan yatırımcılar için en güvenli alım bölgesi."
     else:
         bist_val, bist_change = get_bist100_data()
         usd_val, usd_change = get_usdtry_data()
         market_status = "POZİTİF" if bist_change > 0 else "NEGATİF"
+        strategy = "Stratejik Alım" if bist_change > 0 else "Temkinli Ol"
+        strategy_detail = ""
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Piyasa Durumu", market_status, delta=None)
 
 if selected_market == "US":
     col2.metric("VIX (Korku Endeksi)", f"{vix_val:.2f}", delta=f"{vix_change:+.2f}%")
-    col3.metric("Önerilen Strateji", "Alım Yapılabilir" if market_status == "GÜVENLİ" else "Nakde Geç")
+    col3.metric("Önerilen Strateji", strategy)
+    if strategy_detail:
+        st.info(f"💡 **{strategy}:** {strategy_detail}")
 else:
     col2.metric("BIST-100", f"{bist_val:,.0f}", delta=f"{bist_change:+.2f}%")
     col3.metric("USD/TRY", f"₺{usd_val:.2f}", delta=f"{usd_change:+.2f}%")
