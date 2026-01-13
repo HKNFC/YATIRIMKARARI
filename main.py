@@ -57,6 +57,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 def send_telegram_message(message):
     """Send a message via Telegram bot"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        st.sidebar.error("Token veya Chat ID eksik")
         return False
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -66,8 +67,12 @@ def send_telegram_message(message):
             "parse_mode": "HTML"
         }
         response = requests.post(url, data=data, timeout=10)
+        if response.status_code != 200:
+            error_info = response.json().get("description", "Bilinmeyen hata")
+            st.sidebar.error(f"Telegram hatası: {error_info}")
         return response.status_code == 200
-    except Exception:
+    except Exception as e:
+        st.sidebar.error(f"Bağlantı hatası: {str(e)}")
         return False
 
 @st.cache_data(ttl=900)
