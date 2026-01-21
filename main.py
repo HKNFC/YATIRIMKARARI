@@ -681,6 +681,11 @@ def get_all_sector_candidates(sector_key, sector_name, market="US", sort_by="sco
 def get_portfolio_data(period_key="1 Gün", market="US"):
     sector_df = get_sector_data(period_key, market)
     
+    sector_df = sector_df[sector_df["Değişim (%)"] > 0]
+    
+    if len(sector_df) == 0:
+        return pd.DataFrame()
+    
     if "Para Akışı (%)" in sector_df.columns:
         sector_df["Kombine Skor"] = sector_df["Değişim (%)"] * 0.5 + sector_df["Para Akışı (%)"] * 0.5
         sector_df = sector_df.sort_values(by="Kombine Skor", ascending=False)
@@ -757,6 +762,11 @@ def get_money_flow_portfolio(period_key="1 Gün", market="US"):
     sector_df = get_sector_data(period_key, market)
     
     if "Para Akışı (%)" not in sector_df.columns:
+        return pd.DataFrame()
+    
+    sector_df = sector_df[sector_df["Para Akışı (%)"] > 0]
+    
+    if len(sector_df) == 0:
         return pd.DataFrame()
     
     sector_df = sector_df.sort_values(by="Para Akışı (%)", ascending=False)
