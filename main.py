@@ -151,7 +151,7 @@ def get_usdtry_data():
 
 PERIOD_OPTIONS = {
     "1 Gün": ("2d", 1),
-    "5 Gün": ("7d", 5),
+    "1 Hafta": ("10d", 5),
     "15 Gün": ("20d", 15),
     "1 Ay": ("35d", 22),
     "3 Ay": ("100d", 63),
