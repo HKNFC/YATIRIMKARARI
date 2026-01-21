@@ -165,21 +165,17 @@ MARKET_OPTIONS = {
 }
 
 US_SECTOR_ETFS = {
-    "Yapay Zeka (BOTZ)": "BOTZ",
-    "Siber Güvenlik (HACK)": "HACK",
-    "Yenilenebilir Enerji (ICLN)": "ICLN",
-    "Fintech (FINX)": "FINX",
-    "Biyoteknoloji (XBI)": "XBI",
-    "Teknoloji (XLK)": "XLK",
-    "Sağlık (XLV)": "XLV",
-    "Finans (XLF)": "XLF",
+    "Temel Malzemeler (XLB)": "XLB",
+    "İletişim Hizmetleri (XLC)": "XLC",
+    "Döngüsel Tüketici (XLY)": "XLY",
+    "Savunmacı Tüketici (XLP)": "XLP",
     "Enerji (XLE)": "XLE",
-    "Tüketici (XLY)": "XLY",
+    "Finans (XLF)": "XLF",
+    "Sağlık (XLV)": "XLV",
     "Sanayi (XLI)": "XLI",
-    "Malzeme (XLB)": "XLB",
     "Gayrimenkul (XLRE)": "XLRE",
-    "İletişim (XLC)": "XLC",
-    "Yarı İletken (SMH)": "SMH"
+    "Teknoloji (XLK)": "XLK",
+    "Kamu Hizmetleri (XLU)": "XLU"
 }
 
 BIST_SECTORS = {
@@ -211,21 +207,17 @@ BIST_SECTOR_HOLDINGS = {
 SECTOR_ETFS = US_SECTOR_ETFS
 
 SECTOR_HOLDINGS = {
-    "BOTZ": ["NVDA", "ISRG", "INTC", "TER", "IRBT", "PATH", "CGNX", "ALGN", "ROK", "EMR"],
-    "HACK": ["CRWD", "PANW", "FTNT", "ZS", "OKTA", "CYBR", "S", "NET", "TENB", "RPD"],
-    "ICLN": ["ENPH", "FSLR", "SEDG", "RUN", "PLUG", "NEE", "BE", "CSIQ", "JKS", "NOVA"],
-    "FINX": ["SQ", "PYPL", "INTU", "FIS", "FISV", "COIN", "HOOD", "SOFI", "AFRM", "UPST"],
-    "XBI": ["MRNA", "VRTX", "REGN", "BIIB", "GILD", "AMGN", "ILMN", "EXAS", "SGEN", "ALNY"],
-    "XLK": ["AAPL", "MSFT", "NVDA", "AVGO", "CRM", "ADBE", "CSCO", "ACN", "ORCL", "IBM"],
-    "XLV": ["UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "DHR", "ABT", "BMY"],
-    "XLF": ["BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "C"],
-    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL"],
-    "XLY": ["AMZN", "TSLA", "HD", "MCD", "NKE", "LOW", "SBUX", "TJX", "BKNG", "CMG"],
-    "XLI": ["CAT", "UNP", "HON", "BA", "GE", "RTX", "DE", "LMT", "UPS", "MMM"],
     "XLB": ["LIN", "APD", "SHW", "ECL", "DD", "FCX", "NEM", "DOW", "NUE", "VMC"],
-    "XLRE": ["PLD", "AMT", "EQIX", "CCI", "SPG", "PSA", "O", "DLR", "WELL", "AVB"],
     "XLC": ["META", "GOOGL", "NFLX", "DIS", "T", "VZ", "CMCSA", "CHTR", "TMUS", "EA"],
-    "SMH": ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "TXN", "INTC", "MU", "AMAT"]
+    "XLY": ["AMZN", "TSLA", "HD", "MCD", "NKE", "LOW", "SBUX", "TJX", "BKNG", "CMG"],
+    "XLP": ["PG", "KO", "PEP", "COST", "WMT", "PM", "MO", "CL", "MDLZ", "KHC"],
+    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL"],
+    "XLF": ["BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "C"],
+    "XLV": ["UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "DHR", "ABT", "BMY"],
+    "XLI": ["CAT", "UNP", "HON", "BA", "GE", "RTX", "DE", "LMT", "UPS", "MMM"],
+    "XLRE": ["PLD", "AMT", "EQIX", "CCI", "SPG", "PSA", "O", "DLR", "WELL", "AVB"],
+    "XLK": ["AAPL", "MSFT", "NVDA", "AVGO", "CRM", "ADBE", "CSCO", "ACN", "ORCL", "IBM"],
+    "XLU": ["NEE", "DUK", "SO", "D", "AEP", "SRE", "EXC", "XEL", "PEG", "ED"]
 }
 
 st.sidebar.header("🌍 Pazar Seçimi")
