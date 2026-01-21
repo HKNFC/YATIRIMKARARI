@@ -287,8 +287,14 @@ st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
 @st.cache_data(ttl=60)
 def calculate_mfi(hist, period=14):
     """Finviz tarzı Money Flow Index hesaplar"""
-    if len(hist) < period + 1:
+    # MFI için minimum 5 günlük veri gerekli, aksi halde anlamlı sonuç üretilemez
+    min_period = max(5, period)
+    
+    if len(hist) < min_period + 1:
         return 50.0
+    
+    # Son min_period gün için hesapla
+    actual_period = min(min_period, len(hist) - 1)
     
     typical_prices = (hist['High'] + hist['Low'] + hist['Close']) / 3
     money_flow = typical_prices * hist['Volume']
@@ -296,14 +302,23 @@ def calculate_mfi(hist, period=14):
     positive_mf = 0
     negative_mf = 0
     
-    for i in range(-period, 0):
+    for i in range(-actual_period, 0):
         if typical_prices.iloc[i] > typical_prices.iloc[i-1]:
             positive_mf += money_flow.iloc[i]
         elif typical_prices.iloc[i] < typical_prices.iloc[i-1]:
             negative_mf += money_flow.iloc[i]
     
+    # Her iki akış da 0 ise nötr döndür
+    if positive_mf == 0 and negative_mf == 0:
+        return 50.0
+    
+    # Sadece negatif akış 0 ise maksimum pozitif
     if negative_mf == 0:
         return 100.0
+    
+    # Sadece pozitif akış 0 ise maksimum negatif
+    if positive_mf == 0:
+        return 0.0
     
     money_ratio = positive_mf / negative_mf
     mfi = 100 - (100 / (1 + money_ratio))
