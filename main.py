@@ -293,6 +293,30 @@ market_label = "ABD Borsaları" if selected_market == "US" else "BIST (Borsa İs
 st.subheader(f"Piyasa Analizi ve Sektörel Fırsatlar - {market_label}")
 
 @st.cache_data(ttl=60)
+def calculate_mfi(hist, period=14):
+    """Finviz tarzı Money Flow Index hesaplar"""
+    if len(hist) < period + 1:
+        return 50.0
+    
+    typical_prices = (hist['High'] + hist['Low'] + hist['Close']) / 3
+    money_flow = typical_prices * hist['Volume']
+    
+    positive_mf = 0
+    negative_mf = 0
+    
+    for i in range(-period, 0):
+        if typical_prices.iloc[i] > typical_prices.iloc[i-1]:
+            positive_mf += money_flow.iloc[i]
+        elif typical_prices.iloc[i] < typical_prices.iloc[i-1]:
+            negative_mf += money_flow.iloc[i]
+    
+    if negative_mf == 0:
+        return 100.0
+    
+    money_ratio = positive_mf / negative_mf
+    mfi = 100 - (100 / (1 + money_ratio))
+    return round(mfi, 2)
+
 def get_sector_data(period_key="1 Gün", market="US"):
     if market == "US":
         sector_map = US_SECTOR_ETFS
@@ -306,18 +330,20 @@ def get_sector_data(period_key="1 Gün", market="US"):
         try:
             if market == "US":
                 ticker = yf.Ticker(symbol)
-                hist = ticker.history(period=fetch_period)
+                hist = ticker.history(period="1mo")
                 if len(hist) > lookback_days:
                     current = hist['Close'].iloc[-1]
                     previous = hist['Close'].iloc[-(lookback_days + 1)]
                     change = ((current - previous) / previous) * 100
+                    
                     current_vol = hist['Volume'].iloc[-lookback_days:].sum()
-                    previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
+                    previous_vol = hist['Volume'].iloc[-lookback_days*2:-lookback_days].sum() if len(hist) > lookback_days*2 else hist['Volume'].iloc[0]
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
-                    current_mf = (hist['Close'].iloc[-lookback_days:] * hist['Volume'].iloc[-lookback_days:]).sum()
-                    previous_mf = (hist['Close'].iloc[:len(hist)-lookback_days] * hist['Volume'].iloc[:len(hist)-lookback_days]).sum()
-                    mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mf_change, 2)})
+                    
+                    mfi = calculate_mfi(hist, period=14)
+                    mfi_normalized = mfi - 50
+                    
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mfi_normalized, 2), "MFI": mfi})
                 elif len(hist) >= 2:
                     current = hist['Close'].iloc[-1]
                     previous = hist['Close'].iloc[0]
@@ -325,37 +351,36 @@ def get_sector_data(period_key="1 Gün", market="US"):
                     current_vol = hist['Volume'].iloc[-1]
                     previous_vol = hist['Volume'].iloc[0]
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
-                    current_mf = hist['Close'].iloc[-1] * hist['Volume'].iloc[-1]
-                    previous_mf = hist['Close'].iloc[0] * hist['Volume'].iloc[0]
-                    mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mf_change, 2)})
+                    mfi = calculate_mfi(hist, period=min(14, len(hist)-1))
+                    mfi_normalized = mfi - 50
+                    results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mfi_normalized, 2), "MFI": mfi})
                 else:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0, "MFI": 50})
             else:
                 holdings = BIST_SECTOR_HOLDINGS.get(symbol, [])
                 if not holdings:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0, "MFI": 50})
                     continue
                 sector_changes = []
                 sector_vol_changes = []
-                sector_mf_changes = []
+                sector_mfi_values = []
                 for stock_symbol in holdings[:5]:
                     try:
                         ticker = yf.Ticker(stock_symbol)
-                        hist = ticker.history(period=fetch_period)
+                        hist = ticker.history(period="1mo")
                         if len(hist) > lookback_days:
                             current = hist['Close'].iloc[-1]
                             previous = hist['Close'].iloc[-(lookback_days + 1)]
                             change = ((current - previous) / previous) * 100
                             sector_changes.append(change)
+                            
                             current_vol = hist['Volume'].iloc[-lookback_days:].sum()
-                            previous_vol = hist['Volume'].iloc[:len(hist)-lookback_days].sum()
+                            previous_vol = hist['Volume'].iloc[-lookback_days*2:-lookback_days].sum() if len(hist) > lookback_days*2 else hist['Volume'].iloc[0]
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
-                            current_mf = (hist['Close'].iloc[-lookback_days:] * hist['Volume'].iloc[-lookback_days:]).sum()
-                            previous_mf = (hist['Close'].iloc[:len(hist)-lookback_days] * hist['Volume'].iloc[:len(hist)-lookback_days]).sum()
-                            mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
-                            sector_mf_changes.append(mf_change)
+                            
+                            mfi = calculate_mfi(hist, period=14)
+                            sector_mfi_values.append(mfi)
                         elif len(hist) >= 2:
                             current = hist['Close'].iloc[-1]
                             previous = hist['Close'].iloc[0]
@@ -365,21 +390,20 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             previous_vol = hist['Volume'].iloc[0]
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
-                            current_mf = hist['Close'].iloc[-1] * hist['Volume'].iloc[-1]
-                            previous_mf = hist['Close'].iloc[0] * hist['Volume'].iloc[0]
-                            mf_change = ((current_mf - previous_mf) / previous_mf * 100) if previous_mf > 0 else 0
-                            sector_mf_changes.append(mf_change)
+                            mfi = calculate_mfi(hist, period=min(14, len(hist)-1))
+                            sector_mfi_values.append(mfi)
                     except:
                         pass
                 if sector_changes:
                     avg_change = sum(sector_changes) / len(sector_changes)
                     avg_vol_change = sum(sector_vol_changes) / len(sector_vol_changes) if sector_vol_changes else 0
-                    avg_mf_change = sum(sector_mf_changes) / len(sector_mf_changes) if sector_mf_changes else 0
-                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2), "Hacim Değişim (%)": round(avg_vol_change, 2), "Para Akışı (%)": round(avg_mf_change, 2)})
+                    avg_mfi = sum(sector_mfi_values) / len(sector_mfi_values) if sector_mfi_values else 50
+                    mfi_normalized = avg_mfi - 50
+                    results.append({"Sektör": name, "Değişim (%)": round(avg_change, 2), "Hacim Değişim (%)": round(avg_vol_change, 2), "Para Akışı (%)": round(mfi_normalized, 2), "MFI": round(avg_mfi, 2)})
                 else:
-                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
+                    results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0, "MFI": 50})
         except:
-            results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0})
+            results.append({"Sektör": name, "Değişim (%)": 0, "Hacim Değişim (%)": 0, "Para Akışı (%)": 0, "MFI": 50})
     
     return pd.DataFrame(results)
 
