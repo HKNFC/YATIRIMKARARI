@@ -1462,17 +1462,49 @@ with st.spinner("Piyasa verileri yükleniyor..."):
         strategy = "Stratejik Alım" if bist_change > 0 else "Temkinli Ol"
         strategy_detail = ""
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Piyasa Durumu", market_status, delta=None)
+from datetime import time as dt_time
+import pytz
+
+def is_market_open(market):
+    """Check if market is currently open"""
+    now = datetime.now(pytz.UTC)
+    if market == "US":
+        ny_tz = pytz.timezone('America/New_York')
+        ny_time = now.astimezone(ny_tz)
+        if ny_time.weekday() >= 5:
+            return False
+        market_open = dt_time(9, 30)
+        market_close = dt_time(16, 0)
+        return market_open <= ny_time.time() <= market_close
+    else:
+        ist_tz = pytz.timezone('Europe/Istanbul')
+        ist_time = now.astimezone(ist_tz)
+        if ist_time.weekday() >= 5:
+            return False
+        market_open = dt_time(10, 0)
+        market_close = dt_time(18, 0)
+        return market_open <= ist_time.time() <= market_close
+
+market_open = is_market_open(selected_market)
+market_status_icon = "🟢" if market_open else "🔴"
+market_status_text = "AÇIK" if market_open else "KAPALI"
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Borsa Durumu", f"{market_status_icon} {market_status_text}")
+col2.metric("Piyasa Durumu", market_status, delta=None)
 
 if selected_market == "US":
-    col2.metric("VIX (Korku Endeksi)", f"{vix_val:.2f}", delta=f"{vix_change:+.2f}%")
-    col3.metric("Önerilen Strateji", strategy)
+    col3.metric("VIX (Korku Endeksi)", f"{vix_val:.2f}", delta=f"{vix_change:+.2f}%")
+    col4.metric("Önerilen Strateji", strategy)
     if strategy_detail:
         st.info(f"💡 **{strategy}:** {strategy_detail}")
+    if not market_open:
+        st.caption("⏰ ABD Borsası: 16:30 - 23:00 (TR saati) | Veriler son kapanışı gösteriyor")
 else:
-    col2.metric("BIST-100", f"{bist_val:,.0f}", delta=f"{bist_change:+.2f}%")
-    col3.metric("USD/TRY", f"₺{usd_val:.2f}", delta=f"{usd_change:+.2f}%")
+    col3.metric("BIST-100", f"{bist_val:,.0f}", delta=f"{bist_change:+.2f}%")
+    col4.metric("USD/TRY", f"₺{usd_val:.2f}", delta=f"{usd_change:+.2f}%")
+    if not market_open:
+        st.caption("⏰ BIST: 10:00 - 18:00 (TR saati) | Veriler son kapanışı gösteriyor")
 
 if investor_profile != "Seçiniz":
     st.divider()
