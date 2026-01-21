@@ -579,8 +579,10 @@ def get_top_stocks_from_sector(sector_key, sector_name, count=2, market="US"):
     return sorted_data[:count]
 
 @st.cache_data(ttl=60)
-def get_all_sector_candidates(sector_key, sector_name, market="US"):
-    """Bir sektördeki tüm adayları puanlarıyla döndürür"""
+def get_all_sector_candidates(sector_key, sector_name, market="US", sort_by="score"):
+    """Bir sektördeki tüm adayları puanlarıyla döndürür
+    sort_by: 'score' = 5 kriter ortalaması, 'money_flow' = hacim/para akışı
+    """
     if market == "US":
         holdings = SECTOR_HOLDINGS.get(sector_key, [])
         price_col = "Fiyat ($)"
@@ -608,6 +610,14 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
                 previous = hist['Close'].iloc[-2]
                 daily_change = ((current - previous) / previous) * 100
                 
+                current_volume = hist['Volume'].iloc[-1]
+                prev_volume = hist['Volume'].iloc[-2] if hist['Volume'].iloc[-2] > 0 else 1
+                volume_change = ((current_volume - prev_volume) / prev_volume) * 100
+                
+                current_money_flow = current * current_volume
+                prev_money_flow = previous * prev_volume
+                money_flow_change = ((current_money_flow - prev_money_flow) / prev_money_flow) * 100 if prev_money_flow > 0 else 0
+                
                 if len(hist) >= 5:
                     week_ago = hist['Close'].iloc[0]
                     momentum = ((current - week_ago) / week_ago) * 100
@@ -626,7 +636,9 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
                     "_growth": revenue_growth * 100,
                     "_profitability": profit_margin * 100,
                     "_momentum": momentum,
-                    "_revision": revision_score
+                    "_revision": revision_score,
+                    "_money_flow": money_flow_change,
+                    "_volume_change": volume_change
                 })
         except:
             pass
@@ -639,6 +651,7 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
     profits = normalize_score([d["_profitability"] for d in raw_data])
     momentums = normalize_score([d["_momentum"] for d in raw_data])
     revisions = normalize_score([d["_revision"] for d in raw_data])
+    money_flows = normalize_score([d["_money_flow"] for d in raw_data])
     
     final_data = []
     for i, d in enumerate(raw_data):
@@ -648,6 +661,7 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
         mom_puan = round(momentums[i] * 0.20, 2)
         rev_puan = round(revisions[i] * 0.20, 2)
         toplam = round(val_puan + buy_puan + kar_puan + mom_puan + rev_puan, 2)
+        mf_puan = round(money_flows[i], 2)
         
         final_data.append({
             "Sembol": d["Sembol"],
@@ -655,9 +669,12 @@ def get_all_sector_candidates(sector_key, sector_name, market="US"):
             "Sektör": d["Sektör"],
             price_col: d[price_col],
             "Günlük Değişim (%)": d["Günlük Değişim (%)"],
-            "Toplam Puan": toplam
+            "Toplam Puan": toplam,
+            "Para Akışı Puanı": mf_puan
         })
     
+    if sort_by == "money_flow":
+        return sorted(final_data, key=lambda x: x["Para Akışı Puanı"], reverse=True)
     return sorted(final_data, key=lambda x: x["Toplam Puan"], reverse=True)
 
 @st.cache_data(ttl=60)
@@ -736,7 +753,7 @@ def get_portfolio_data(period_key="1 Gün", market="US"):
 
 @st.cache_data(ttl=60)
 def get_money_flow_portfolio(period_key="1 Gün", market="US"):
-    """Sadece para akışına göre hisse seçimi yapar"""
+    """Sadece para akışına göre hisse seçimi yapar - hem sektörler hem hisseler para akışına göre sıralanır"""
     sector_df = get_sector_data(period_key, market)
     
     if "Para Akışı (%)" not in sector_df.columns:
@@ -759,7 +776,7 @@ def get_money_flow_portfolio(period_key="1 Gün", market="US"):
         sector_key = sector_map.get(sector_name, "")
         rank = list(top_6_sectors.index).index(idx) + 1
         
-        candidates = get_all_sector_candidates(sector_key, sector_name, market)
+        candidates = get_all_sector_candidates(sector_key, sector_name, market, sort_by="money_flow")
         sector_candidates[sector_name] = candidates
         sector_quotas[sector_name] = 2 if rank <= 4 else 1
     
@@ -767,7 +784,7 @@ def get_money_flow_portfolio(period_key="1 Gün", market="US"):
     for sector_name, candidates in sector_candidates.items():
         for candidate in candidates:
             symbol = candidate["Sembol"]
-            score = candidate["Toplam Puan"]
+            score = candidate.get("Para Akışı Puanı", 0)
             if symbol not in symbol_best_sector or score > symbol_best_sector[symbol]["score"]:
                 symbol_best_sector[symbol] = {"sector": sector_name, "score": score}
     
@@ -806,7 +823,10 @@ def get_money_flow_portfolio(period_key="1 Gün", market="US"):
     if not final_picks:
         return pd.DataFrame()
     
-    return pd.DataFrame(final_picks)
+    result_df = pd.DataFrame(final_picks)
+    if "Para Akışı Puanı" in result_df.columns:
+        result_df = result_df.drop(columns=["Para Akışı Puanı"])
+    return result_df
 
 @st.cache_data(ttl=120)
 def get_profile_based_stocks(profile_name, market="US"):
