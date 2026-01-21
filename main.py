@@ -332,7 +332,8 @@ def get_sector_data(period_key="1 Gün", market="US"):
                     previous_vol = hist['Volume'].iloc[-lookback_days*2:-lookback_days].sum() if len(hist) > lookback_days*2 else hist['Volume'].iloc[0]
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                     
-                    mfi = calculate_mfi(hist, period=14)
+                    mfi_period = min(lookback_days, len(hist) - 1)
+                    mfi = calculate_mfi(hist, period=max(1, mfi_period))
                     mfi_normalized = mfi - 50
                     
                     results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mfi_normalized, 2), "MFI": mfi})
@@ -343,7 +344,7 @@ def get_sector_data(period_key="1 Gün", market="US"):
                     current_vol = hist['Volume'].iloc[-1]
                     previous_vol = hist['Volume'].iloc[0]
                     vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
-                    mfi = calculate_mfi(hist, period=min(14, len(hist)-1))
+                    mfi = calculate_mfi(hist, period=min(lookback_days, len(hist)-1))
                     mfi_normalized = mfi - 50
                     results.append({"Sektör": name, "Değişim (%)": round(change, 2), "Hacim Değişim (%)": round(vol_change, 2), "Para Akışı (%)": round(mfi_normalized, 2), "MFI": mfi})
                 else:
@@ -371,7 +372,8 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
                             
-                            mfi = calculate_mfi(hist, period=14)
+                            mfi_period = min(lookback_days, len(hist) - 1)
+                            mfi = calculate_mfi(hist, period=max(1, mfi_period))
                             sector_mfi_values.append(mfi)
                         elif len(hist) >= 2:
                             current = hist['Close'].iloc[-1]
@@ -382,7 +384,7 @@ def get_sector_data(period_key="1 Gün", market="US"):
                             previous_vol = hist['Volume'].iloc[0]
                             vol_change = ((current_vol - previous_vol) / previous_vol * 100) if previous_vol > 0 else 0
                             sector_vol_changes.append(vol_change)
-                            mfi = calculate_mfi(hist, period=min(14, len(hist)-1))
+                            mfi = calculate_mfi(hist, period=min(lookback_days, len(hist)-1))
                             sector_mfi_values.append(mfi)
                     except:
                         pass
